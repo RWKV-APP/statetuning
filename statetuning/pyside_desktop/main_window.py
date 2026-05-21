@@ -152,6 +152,11 @@ class MainWindow(QMainWindow):
         self._model_loading_label: QLabel | None = None
         self._model_loading_spinner_timer: QTimer | None = None
         self._model_loading_spinner_index = 0
+        self._test_loading_dialog: QDialog | None = None
+        self._test_loading_spinner: QLabel | None = None
+        self._test_loading_label: QLabel | None = None
+        self._test_loading_spinner_timer: QTimer | None = None
+        self._test_loading_spinner_index = 0
 
         self._build_top_bar(root)
 
@@ -474,6 +479,55 @@ class MainWindow(QMainWindow):
         frames = ("◐", "◓", "◑", "◒")
         self._model_loading_spinner_index = (self._model_loading_spinner_index + 1) % len(frames)
         self._model_loading_spinner.setText(frames[self._model_loading_spinner_index])
+
+    def _sync_test_loading_dialog(self, is_loading: bool) -> None:
+        if not is_loading:
+            if self._test_loading_dialog is not None:
+                self._test_loading_dialog.close()
+                self._test_loading_dialog = None
+                self._test_loading_spinner = None
+                self._test_loading_label = None
+            if self._test_loading_spinner_timer is not None:
+                self._test_loading_spinner_timer.stop()
+                self._test_loading_spinner_timer = None
+            return
+
+        text = tr("btn_load_model_loading")
+        if self._test_loading_dialog is None:
+            dlg = QDialog(self)
+            dlg.setWindowTitle(text)
+            dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+            dlg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
+            dlg.setFixedSize(320, 140)
+            lay = QVBoxLayout(dlg)
+            spinner = QLabel("◐")
+            spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            spinner.setStyleSheet("font-size: 28px; color: #60a5fa;")
+            lay.addWidget(spinner)
+            lab = QLabel(text)
+            lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lab.setStyleSheet("font-size: 15px; color: #e5e7eb;")
+            lay.addWidget(lab)
+            self._test_loading_dialog = dlg
+            self._test_loading_spinner = spinner
+            self._test_loading_label = lab
+            self._test_loading_spinner_timer = QTimer(self)
+            self._test_loading_spinner_timer.setInterval(120)
+            self._test_loading_spinner_timer.timeout.connect(self._tick_test_loading_spinner)
+            self._test_loading_spinner_timer.start()
+            dlg.show()
+            return
+
+        self._test_loading_dialog.setWindowTitle(text)
+        if self._test_loading_label is not None:
+            self._test_loading_label.setText(text)
+
+    def _tick_test_loading_spinner(self) -> None:
+        if self._test_loading_spinner is None:
+            return
+        frames = ("◐", "◓", "◑", "◒")
+        self._test_loading_spinner_index = (self._test_loading_spinner_index + 1) % len(frames)
+        self._test_loading_spinner.setText(frames[self._test_loading_spinner_index])
 
     def _pick_pth(self) -> None:
         p, _ = QFileDialog.getOpenFileName(self, tr("dialog_pick_model_pth"), "", "*.pth;;All (*)")
@@ -1148,6 +1202,7 @@ class MainWindow(QMainWindow):
             self.repo_log_view.setPlainText(c.repo_log)
 
         # ── Test tab ──────────────────────────────────────────────────────────
+        self._sync_test_loading_dialog(c.is_rwkv_loading)
         if hasattr(self, "test_status_lbl"):
             self.test_status_lbl.setText(c.rwkv_status)
         if hasattr(self, "test_chat_view"):
