@@ -6,7 +6,7 @@ RWKV **State Tuning** 的可视化工具，用于配置模型、准备数据、�
 
 | 客户端 | 目录 | 技术栈 | 适用场景 |
 |--------|------|--------|----------|
-| Flutter 版 | 项目根目录（`lib/` 等） | Flutter / Dart | 移动端（Android / iOS）及桌面端（Windows / Linux 等） |
+| Flutter 版 | 项目根目录（`lib/` 等） | Flutter / Dart | 桌面端（Windows / Linux） |
 | PySide 桌面版 | `pyside_desktop/` | Python / PySide6 | Windows / Linux 原生桌面应用 |
 
 内置训练脚本位于各客户端自带的 `statetuning_repo/` 目录中，支持 bf16 / fp16 / fp32 精度的 RWKV7 State Tuning 训练。
