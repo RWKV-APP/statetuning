@@ -71,6 +71,35 @@ def is_windows() -> bool:
     return platform.system() == "Windows"
 
 
+def is_linux() -> bool:
+    return platform.system() == "Linux"
+
+
+def is_wsl() -> bool:
+    if not is_linux():
+        return False
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        text = Path("/proc/version").read_text(encoding="utf-8", errors="ignore").lower()
+        return "microsoft" in text
+    except OSError:
+        return False
+
+
+def patch_linux_utf8_env(source: Dict[str, str]) -> Dict[str, str]:
+    env = dict(source)
+    if not is_linux():
+        return env
+    preferred = "zh_CN.UTF-8" if is_wsl() else "C.UTF-8"
+    env.setdefault("LANG", preferred)
+    env.setdefault("LC_ALL", preferred)
+    env.setdefault("LC_CTYPE", preferred)
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    return env
+
+
 def tr(key: str, **params: str) -> str:
     return i18n.tr(key, **params)
 
@@ -239,7 +268,7 @@ class HomeController(QObject):
         return p if p.exists() else None
 
     def _env_with_torch_runtime(self) -> Dict[str, str]:
-        env = dict(os.environ)
+        env = patch_linux_utf8_env(dict(os.environ))
         vpy = self._venv_python_path()
         venv_dir = self._venv_dir()
         if vpy is None or venv_dir is None:
@@ -257,6 +286,46 @@ class HomeController(QObject):
             cuda_bin = str(Path(self.cuda_home) / "bin")
             env["PATH"] = cuda_bin + sep + env["PATH"]
         return env
+
+    def _maybe_apply_wsl_chinese_patch_bg(self) -> None:
+        if not is_wsl():
+            return
+        self.install_log += "\n[WSL] Applying Chinese locale/font patch (best effort)..."
+        self._emit()
+        if shutil.which("apt-get") is None:
+            self.install_log += (
+                "\n[WSL] apt-get not found. Please install Chinese locale and CJK fonts manually."
+            )
+            self._emit()
+            return
+        cmd = (
+            'if command -v sudo >/dev/null 2>&1; then SUDO="sudo -n"; else SUDO=""; fi; '
+            "$SUDO apt-get update && "
+            "$SUDO apt-get install -y locales fonts-noto-cjk fonts-wqy-zenhei && "
+            "($SUDO locale-gen zh_CN.UTF-8 || true)"
+        )
+        try:
+            r = subprocess.run(
+                ["bash", "-lc", cmd],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=patch_linux_utf8_env(dict(os.environ)),
+            )
+            out = ((r.stdout or "") + (r.stderr or "")).strip()
+            if out:
+                self.install_log += "\n" + out[-1200:]
+            if r.returncode == 0:
+                self.install_log += "\n[WSL] Chinese locale/font patch applied."
+            else:
+                self.install_log += (
+                    f"\n[WSL] Auto patch failed (code={r.returncode}). "
+                    "Run manually: sudo apt-get update && sudo apt-get install -y locales "
+                    "fonts-noto-cjk fonts-wqy-zenhei && sudo locale-gen zh_CN.UTF-8"
+                )
+        except Exception as e:
+            self.install_log += f"\n[WSL] Chinese patch skipped: {e}"
+        self._emit()
 
     def select_python_env_dir(self, path: str) -> None:
         if not path:
@@ -1364,6 +1433,7 @@ class HomeController(QObject):
         self.install_log = tr("log_env_install_start")
         self._emit()
         try:
+            self._maybe_apply_wsl_chinese_patch_bg()
             vpy = self._venv_python_path()
             rp = Path(self.repo_path)
             venv_dir = self._venv_dir() or (rp / "python_venv")
@@ -1427,7 +1497,7 @@ class HomeController(QObject):
                 return False
 
             def without_proxy_env() -> Dict[str, str]:
-                env = dict(os.environ)
+                env = patch_linux_utf8_env(dict(os.environ))
                 for key in (
                     "HTTP_PROXY",
                     "HTTPS_PROXY",
@@ -1460,6 +1530,7 @@ class HomeController(QObject):
                 env: Optional[Dict[str, str]] = None,
                 retry_proxy: bool = True,
             ) -> subprocess.CompletedProcess[str]:
+                proc_env = patch_linux_utf8_env(env or dict(os.environ))
                 captured: list[str] = []
                 last_emit = 0.0
 
@@ -1487,7 +1558,7 @@ class HomeController(QObject):
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
-                    env=env,
+                    env=proc_env,
                 )
 
                 def reader() -> None:

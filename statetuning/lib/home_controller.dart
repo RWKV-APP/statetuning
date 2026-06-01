@@ -827,6 +827,35 @@ class HomeController extends GetxController {
     return env;
   }
 
+  bool get _isWsl {
+    if (!Platform.isLinux) return false;
+    if (Platform.environment.containsKey('WSL_DISTRO_NAME') ||
+        Platform.environment.containsKey('WSL_INTEROP')) {
+      return true;
+    }
+    try {
+      final f = File('/proc/version');
+      if (f.existsSync()) {
+        final text = f.readAsStringSync().toLowerCase();
+        return text.contains('microsoft');
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Linux/WSL 统一 UTF-8 修补，避免中文日志乱码。
+  Map<String, String> _patchLinuxUtf8Env(Map<String, String> source) {
+    final env = Map<String, String>.from(source);
+    if (!Platform.isLinux) return env;
+    final preferredLocale = _isWsl ? 'zh_CN.UTF-8' : 'C.UTF-8';
+    if ((env['LANG'] ?? '').isEmpty) env['LANG'] = preferredLocale;
+    if ((env['LC_ALL'] ?? '').isEmpty) env['LC_ALL'] = preferredLocale;
+    if ((env['LC_CTYPE'] ?? '').isEmpty) env['LC_CTYPE'] = preferredLocale;
+    env['PYTHONUTF8'] = env['PYTHONUTF8'] ?? '1';
+    env['PYTHONIOENCODING'] = env['PYTHONIOENCODING'] ?? 'utf-8';
+    return env;
+  }
+
   /// 检测 NVIDIA 驱动是否已安装（GPU 训练需先装驱动，再装 CUDA Toolkit）
   Future<void> detectNvidiaDriver() async {
     try {
@@ -845,7 +874,7 @@ class HomeController extends GetxController {
 
   /// 与训练子进程一致：venv Scripts、torch/lib、CUDA bin，便于子进程加载 GPU 相关 DLL。
   Map<String, String> _envWithTorchRuntime() {
-    final env = Map<String, String>.from(Platform.environment);
+    final env = _patchLinuxUtf8Env(Platform.environment);
     if (_venvPythonPath == null || repoPath.value.isEmpty) return env;
     final sep = Platform.pathSeparator;
     final venvScripts = Platform.isWindows
@@ -2104,13 +2133,55 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
 
   // --- Environment ---
 
-  /// 项目内 venv 的 Python 路径（repoPath/python_venv/Scripts/python.exe）
+  /// 项目内 venv 的 Python 路径。
   String? get _venvPythonPath {
     if (repoPath.value.isEmpty) return null;
-    final p =
-        '${repoPath.value}${Platform.pathSeparator}python_venv'
-        '${Platform.pathSeparator}Scripts${Platform.pathSeparator}python.exe';
+    final p = Platform.isWindows
+        ? '${repoPath.value}${Platform.pathSeparator}python_venv'
+              '${Platform.pathSeparator}Scripts${Platform.pathSeparator}python.exe'
+        : '${repoPath.value}${Platform.pathSeparator}python_venv'
+              '${Platform.pathSeparator}bin${Platform.pathSeparator}python';
     return p;
+  }
+
+  Future<void> _maybeApplyWslChinesePatch() async {
+    if (!_isWsl) return;
+    installLog.value +=
+        '[WSL] Applying Chinese locale/font patch (best effort)...\n';
+    final aptGet = File('/usr/bin/apt-get');
+    if (!aptGet.existsSync()) {
+      installLog.value +=
+          '[WSL] apt-get not found. Please install Chinese locale and CJK fonts manually.\n';
+      return;
+    }
+    final cmd =
+        'if command -v sudo >/dev/null 2>&1; then SUDO="sudo -n"; else SUDO=""; fi; '
+        r'$SUDO apt-get update && '
+        r'$SUDO apt-get install -y locales fonts-noto-cjk fonts-wqy-zenhei && '
+        r'($SUDO locale-gen zh_CN.UTF-8 || true)';
+    try {
+      final r = await Process.run(
+        'bash',
+        ['-lc', cmd],
+        runInShell: true,
+        environment: _patchLinuxUtf8Env(Platform.environment),
+        stdoutEncoding: _processUtf8AllowMalformed,
+        stderrEncoding: _processUtf8AllowMalformed,
+      );
+      final out = (r.stdout as String).trim();
+      final err = (r.stderr as String).trim();
+      if (out.isNotEmpty) installLog.value += '$out\n';
+      if (err.isNotEmpty) installLog.value += '$err\n';
+      if (r.exitCode == 0) {
+        installLog.value += '[WSL] Chinese locale/font patch applied.\n';
+      } else {
+        installLog.value +=
+            '[WSL] Auto patch failed (code=${r.exitCode}). '
+            'Run manually: sudo apt-get update && sudo apt-get install -y locales fonts-noto-cjk fonts-wqy-zenhei && sudo locale-gen zh_CN.UTF-8\n';
+      }
+    } catch (e) {
+      installLog.value += '[WSL] Chinese patch skipped: $e\n';
+    }
   }
 
   /// 检测 UV 是否已安装
@@ -2291,6 +2362,8 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
     installLog.value = '';
 
     try {
+      await _maybeApplyWslChinesePatch();
+
       // ── 1. 检测 UV ───────────────────────────────────────────────
       installLog.value += 'log_install_check_uv'.tr;
       await detectUv();
@@ -2306,15 +2379,17 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
 
       // ── 2. 创建/确认 venv ───────────────────────────────────────
       final venvDir = '${repoPath.value}${Platform.pathSeparator}python_venv';
-      final venvPy =
-          '$venvDir${Platform.pathSeparator}Scripts${Platform.pathSeparator}python.exe';
+      final venvPy = Platform.isWindows
+          ? '$venvDir${Platform.pathSeparator}Scripts${Platform.pathSeparator}python.exe'
+          : '$venvDir${Platform.pathSeparator}bin${Platform.pathSeparator}python';
       if (!await File(venvPy).exists()) {
         installLog.value += 'log_install_create_venv'.tr;
         final venvResult = await Process.run(
           'uv',
-          ['venv', './python_venv', '--python', '3.12'],
+          ['venv', './python_venv', if (Platform.isWindows) ...['--python', '3.12']],
           workingDirectory: repoPath.value,
           runInShell: true,
+          environment: _patchLinuxUtf8Env(Platform.environment),
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -2335,7 +2410,9 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
       installLog.value +=
           'log_install_torch_cuda'.trParams({'tag': torchWheelTag});
 
-      final venvPython = './python_venv/Scripts/python.exe';
+      final venvPython = Platform.isWindows
+          ? './python_venv/Scripts/python.exe'
+          : './python_venv/bin/python';
       final failed = <String>[];
 
       for (final pkg in _envPackages) {
@@ -2358,6 +2435,7 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
             ],
             workingDirectory: repoPath.value,
             runInShell: true,
+            environment: _patchLinuxUtf8Env(Platform.environment),
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
@@ -2376,6 +2454,7 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
               ['-m', 'pip', 'install', pkg, '--index-url', torchIndexUrl],
               workingDirectory: repoPath.value,
               runInShell: true,
+              environment: _patchLinuxUtf8Env(Platform.environment),
               stdoutEncoding: utf8,
               stderrEncoding: utf8,
             );
@@ -2401,6 +2480,7 @@ print(f"Saved {len(state_dict_to_save)} state weights to: {save_path}")
             ['pip', 'install', '--python', venvPython, pkg],
             workingDirectory: repoPath.value,
             runInShell: true,
+            environment: _patchLinuxUtf8Env(Platform.environment),
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
