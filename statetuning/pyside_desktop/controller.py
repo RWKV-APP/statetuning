@@ -100,6 +100,24 @@ def patch_linux_utf8_env(source: Dict[str, str]) -> Dict[str, str]:
     return env
 
 
+def decode_subprocess_bytes(raw: bytes) -> str:
+    """Decode training/subprocess stdout; MSVC on Chinese Windows often uses GBK."""
+    if not raw:
+        return ""
+    encodings = ("utf-8", "gbk", "cp936") if is_windows() else ("utf-8",)
+    parts: list[str] = []
+    for line in raw.splitlines(keepends=True):
+        text: str | None = None
+        for enc in encodings:
+            try:
+                text = line.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        parts.append(text if text is not None else line.decode("utf-8", errors="replace"))
+    return "".join(parts)
+
+
 def tr(key: str, **params: str) -> str:
     return i18n.tr(key, **params)
 
@@ -920,6 +938,8 @@ class HomeController(QObject):
 
         env = self._env_with_torch_runtime()
         env["VSLANG"] = "1033"
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
         env["TQDM_MININTERVAL"] = "0"
         env["TQDM_MINITERS"] = "1"
 
@@ -966,7 +986,10 @@ class HomeController(QObject):
                 )
                 bat = (
                     "@echo off\r\n"
+                    "chcp 65001 >nul\r\n"
                     'set "VSLANG=1033"\r\n'
+                    'set "PYTHONUTF8=1"\r\n'
+                    'set "PYTHONIOENCODING=utf-8"\r\n'
                     f'call "{vc}" x64\r\n'
                     "if errorlevel 1 exit /b %errorlevel%\r\n"
                     f'set "PATH={cmd_prefix};%PATH%"\r\n'
@@ -1074,7 +1097,7 @@ class HomeController(QObject):
     def _on_train_stdout(self) -> None:
         if not self._proc:
             return
-        data = bytes(self._proc.readAllStandardOutput()).decode("utf-8", errors="replace")
+        data = decode_subprocess_bytes(bytes(self._proc.readAllStandardOutput()))
         self._append_log_data(data)
         self._parse_loss(data)
 
