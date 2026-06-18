@@ -104,9 +104,9 @@ def _ss() -> str:
     }
     QTabBar::tab:!selected { color: #6b7280; }
     QLabel#tabStepBadge {
-      min-width: 24px; max-width: 24px; min-height: 20px; max-height: 20px;
-      border-radius: 10px; border: 1px solid #4b5563;
-      font-size: 11px; font-weight: 700;
+      min-width: 18px; max-width: 18px; min-height: 16px; max-height: 16px;
+      border-radius: 8px; border: 1px solid #4b5563;
+      font-size: 10px; font-weight: 700;
       background: #20242b; color: #aeb6c2;
     }
     QLabel#tabStepBadge[selected="true"] {
@@ -132,7 +132,7 @@ def _make_tab_step_badge(step: int) -> QLabel:
     badge = QLabel(str(step))
     badge.setObjectName("tabStepBadge")
     badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    badge.setFixedSize(24, 20)
+    badge.setFixedSize(18, 16)
     _style_tab_step_badge(badge, selected=False)
     return badge
 
@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
             wrap = QWidget()
             wrap.setStyleSheet("background: transparent;")
             row = QHBoxLayout(wrap)
-            row.setContentsMargins(10, 0, 4, 0)
+            row.setContentsMargins(4, 0, 4, 0)
             row.setSpacing(0)
             row.addWidget(badge)
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, wrap)
