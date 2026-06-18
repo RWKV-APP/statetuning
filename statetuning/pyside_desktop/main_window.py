@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTabBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -56,6 +57,21 @@ def _ss() -> str:
       background: #1a1d21; border: 1px solid #3a3f47; border-radius: 8px;
       padding: 8px 12px; selection-background-color: #3b82f6;
     }
+    QLabel#fieldLabel {
+      color: #9ca3af; font-size: 13px; padding: 6px 16px 6px 0;
+    }
+    QLabel#valueDisplay {
+      color: #ffffff; font-size: 15px; font-weight: 600; padding: 6px 0;
+      background: transparent;
+    }
+    QLabel#hintDisplay {
+      color: #9ca3af; padding: 4px 0; background: transparent;
+    }
+    QPlainTextEdit#logPanel {
+      background: #252830; border: none; border-radius: 8px;
+      padding: 10px 12px; color: #d1d5db;
+    }
+    QPlainTextEdit#logPanel:focus { border: none; outline: none; }
     QComboBox QAbstractItemView {
       background: #1a1d21; color: #e5e7eb; outline: 0;
       border: 1px solid #3a3f47; padding: 4px;
@@ -78,14 +94,39 @@ def _ss() -> str:
     QTabWidget::pane { border: 1px solid #3a3f47; border-radius: 8px; top: -1px; background: #1a1d21; }
     QTabWidget::tab-bar { background: #1a1d21; }
     QTabBar { background: #1a1d21; }
-    QTabBar::tab { background: #252830; padding: 12px 22px; margin-right: 2px; }
+    QTabBar::tab { background: #252830; padding: 10px 6px 10px 18px; margin-right: 2px; }
     QTabBar::tab:selected { border-bottom: 2px solid #3b82f6; color: #fff; font-weight: 600; }
     QTabBar::tab:!selected { color: #6b7280; }
+    QLabel#tabStepBadge {
+      min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
+      border-radius: 11px; font-size: 11px; font-weight: 600;
+      background: #3a3f47; color: #9ca3af;
+    }
+    QLabel#tabStepBadge[selected="true"] {
+      background: #3b82f6; color: #ffffff; font-weight: 700;
+    }
     """
 
 
 def tr(k: str, **p: str) -> str:
     return i18n.tr(k, **p)
+
+
+def _style_tab_step_badge(badge: QLabel, *, selected: bool) -> None:
+    badge.setProperty("selected", selected)
+    style = badge.style()
+    style.unpolish(badge)
+    style.polish(badge)
+    badge.update()
+
+
+def _make_tab_step_badge(step: int) -> QLabel:
+    badge = QLabel(str(step))
+    badge.setObjectName("tabStepBadge")
+    badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    badge.setFixedSize(22, 22)
+    _style_tab_step_badge(badge, selected=False)
+    return badge
 
 
 class _NoElideDelegate(QStyledItemDelegate):
@@ -157,6 +198,7 @@ class MainWindow(QMainWindow):
         self._test_loading_label: QLabel | None = None
         self._test_loading_spinner_timer: QTimer | None = None
         self._test_loading_spinner_index = 0
+        self._tab_step_badges: list[QLabel] = []
 
         self._build_top_bar(root)
 
@@ -174,13 +216,20 @@ class MainWindow(QMainWindow):
         self._tab_settings = self._wrap_scroll(self._page_settings())
         self._tab_test = self._wrap_scroll(self._page_test())
 
-        self.tabs.addTab(self._tab_model, tr("tab_model"))
-        self.tabs.addTab(self._tab_data, tr("tab_data"))
-        self.tabs.addTab(self._tab_train, tr("tab_train"))
-        self.tabs.addTab(self._tab_monitor, tr("tab_monitor"))
-        self.tabs.addTab(self._tab_export, tr("tab_export"))
-        self.tabs.addTab(self._tab_settings, tr("tab_settings"))
-        self.tabs.addTab(self._tab_test, tr("tab_test"))
+        for page, key in zip(
+            (
+                self._tab_model,
+                self._tab_data,
+                self._tab_train,
+                self._tab_monitor,
+                self._tab_export,
+                self._tab_settings,
+                self._tab_test,
+            ),
+            _TAB_KEYS,
+        ):
+            self.tabs.addTab(page, tr(key))
+        self._setup_tab_step_badges()
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -208,8 +257,10 @@ class MainWindow(QMainWindow):
             elif isinstance(w, QLineEdit):
                 w.setPlaceholderText(s)
         elif mode == "plain":
-            assert isinstance(w, QPlainTextEdit)
-            w.setPlainText(s)
+            if isinstance(w, QPlainTextEdit):
+                w.setPlainText(s)
+            elif isinstance(w, QLabel):
+                w.setText(s)
         elif mode == "label_colon":
             assert isinstance(w, QLabel)
             w.setText(s + ":")
@@ -227,6 +278,7 @@ class MainWindow(QMainWindow):
             self._apply_tr_widget(item[0], item[1], item[2])
         for i, key in enumerate(_TAB_KEYS):
             self.tabs.setTabText(i, tr(key))
+        self._update_tab_step_badges()
         if getattr(self, "_preset_buttons", None):
             for p, btn in self._preset_buttons:
                 btn.setText(tr("preset_custom") if p.label == kCustomPresetLabel else p.label)
@@ -259,8 +311,30 @@ class MainWindow(QMainWindow):
                 le.setText(str(v))
                 le.blockSignals(False)
 
+    def _setup_tab_step_badges(self) -> None:
+        bar = self.tabs.tabBar()
+        self._tab_step_badges = []
+        for i in range(len(_TAB_KEYS)):
+            badge = _make_tab_step_badge(i + 1)
+            wrap = QWidget()
+            wrap.setStyleSheet("background: transparent;")
+            row = QHBoxLayout(wrap)
+            row.setContentsMargins(10, 0, 2, 0)
+            row.setSpacing(0)
+            row.addWidget(badge)
+            bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, wrap)
+            self._tab_step_badges.append(badge)
+        self._update_tab_step_badges()
+
+    def _update_tab_step_badges(self, selected_idx: int | None = None) -> None:
+        if selected_idx is None:
+            selected_idx = self.tabs.currentIndex()
+        for i, badge in enumerate(self._tab_step_badges):
+            _style_tab_step_badge(badge, selected=(i == selected_idx))
+
     def _on_tab_changed(self, idx: int) -> None:
         self._ctrl.set_tab_index(int(idx))
+        self._update_tab_step_badges(idx)
 
     def _on_toast(self, title: str, msg: str) -> None:
         QMessageBox.information(self, title, msg)
@@ -331,6 +405,37 @@ class MainWindow(QMainWindow):
         w.setWidget(inner)
         return w
 
+    def _value_label(self, text: str = "", *, wrap: bool = False) -> QLabel:
+        lb = QLabel(text)
+        lb.setObjectName("valueDisplay")
+        lb.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if wrap:
+            lb.setWordWrap(True)
+        return lb
+
+    def _field_label(self, key: str) -> QLabel:
+        lb = QLabel()
+        self._tr_reg(lb, key, "label_colon")
+        lb.setObjectName("fieldLabel")
+        return lb
+
+    def _log_panel(
+        self,
+        *,
+        mono: bool = False,
+        max_height: int | None = None,
+    ) -> QPlainTextEdit:
+        view = QPlainTextEdit()
+        view.setReadOnly(True)
+        view.setObjectName("logPanel")
+        if mono:
+            view.setFont(
+                QFont("Menlo", 11) if sys.platform == "darwin" else QFont("Consolas", 10)
+            )
+        if max_height is not None:
+            view.setMaximumHeight(max_height)
+        return view
+
     def _line(self, placeholder_key: str, attr: str, browse: str | None = None) -> QHBoxLayout:
         row = QHBoxLayout()
         le = QLineEdit()
@@ -395,19 +500,15 @@ class MainWindow(QMainWindow):
 
         adv = QGroupBox()
         self._tr_reg(adv, "modelargs_advanced", "title")
-        g = QGridLayout(adv)
-        g.addWidget(self._tr_reg(QLabel(), "label_vocab_size"), 0, 0)
-        self.vocab_e = QLineEdit()
-        self.vocab_e.setReadOnly(True)
-        g.addWidget(self.vocab_e, 0, 1)
-        g.addWidget(self._tr_reg(QLabel(), "label_n_embd"), 0, 2)
-        self.n_embd_e = QLineEdit()
-        self.n_embd_e.setReadOnly(True)
-        g.addWidget(self.n_embd_e, 0, 3)
-        g.addWidget(self._tr_reg(QLabel(), "label_n_layer"), 1, 0)
-        self.n_layer_e = QLineEdit()
-        self.n_layer_e.setReadOnly(True)
-        g.addWidget(self.n_layer_e, 1, 1)
+        sf = QFormLayout(adv)
+        sf.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        sf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.vocab_e = self._value_label()
+        sf.addRow(self._field_label("label_vocab_size"), self.vocab_e)
+        self.n_embd_e = self._value_label()
+        sf.addRow(self._field_label("label_n_embd"), self.n_embd_e)
+        self.n_layer_e = self._value_label()
+        sf.addRow(self._field_label("label_n_layer"), self.n_layer_e)
         v.addWidget(adv)
 
         nx = QPushButton()
@@ -584,9 +685,7 @@ class MainWindow(QMainWindow):
         hb.addWidget(chk)
         hb.addStretch()
         rl.addLayout(hb)
-        self.repo_log_view = QPlainTextEdit()
-        self.repo_log_view.setReadOnly(True)
-        self.repo_log_view.setMaximumHeight(120)
+        self.repo_log_view = self._log_panel(max_height=120)
         self._tr_reg(self.repo_log_view, "repo_log_placeholder", "placeholder")
         rl.addWidget(self.repo_log_view)
         v.addWidget(repo)
@@ -597,11 +696,10 @@ class MainWindow(QMainWindow):
         dl.addWidget(self._tr_reg(QLabel(), "label_jsonl_path"))
         dl.addLayout(self._line("hint_jsonl_pick", "data_path", "file_jsonl"))
         dl.addWidget(self._tr_reg(QLabel(), "data_format_title"))
-        fmt = QPlainTextEdit()
-        fmt.setReadOnly(True)
-        fmt.setMaximumHeight(72)
-        self._tr_reg(fmt, "data_format_example_line", "plain")
+        fmt = self._tr_reg(QLabel(), "data_format_example_line", "plain")
         fmt.setStyleSheet("color: #86efac; font-family: monospace;")
+        fmt.setWordWrap(True)
+        fmt.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         dl.addWidget(fmt)
         v.addWidget(dt)
 
@@ -650,6 +748,8 @@ class MainWindow(QMainWindow):
         sm = QGroupBox()
         self._tr_reg(sm, "config_summary", "title")
         sf = QFormLayout(sm)
+        sf.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        sf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.sum_labels = {}
         for key, lab_key in [
             ("repo", "summary_repo"),
@@ -663,10 +763,8 @@ class MainWindow(QMainWindow):
             ("bse", "summary_batch_steps_epochs"),
             ("lr", "summary_lr"),
         ]:
-            lw = QLabel()
-            self._tr_reg(lw, lab_key, "label_colon")
-            lb = QLabel("")
-            sf.addRow(lw, lb)
+            lb = self._value_label(wrap=True)
+            sf.addRow(self._field_label(lab_key), lb)
             self.sum_labels[key] = lb
         v.addWidget(sm)
 
@@ -746,10 +844,8 @@ class MainWindow(QMainWindow):
         cl.clicked.connect(self._clear_train_log)
         hb.addWidget(cl)
         v.addLayout(hb)
-        self.log_view = QPlainTextEdit()
-        self.log_view.setReadOnly(True)
+        self.log_view = self._log_panel(mono=True)
         self._tr_reg(self.log_view, "monitor_log_placeholder", "placeholder")
-        self.log_view.setFont(QFont("Menlo", 11) if sys.platform == "darwin" else QFont("Consolas", 10))
         v.addWidget(self.log_view, 1)
         return w
 
@@ -838,10 +934,8 @@ class MainWindow(QMainWindow):
         hb.addStretch()
         v.addLayout(hb)
 
-        self.file_list = QPlainTextEdit()
-        self.file_list.setReadOnly(True)
+        self.file_list = self._log_panel(mono=True)
         self._tr_reg(self.file_list, "export_no_files_hint", "placeholder")
-        self.file_list.setFont(QFont("Menlo", 10) if sys.platform == "darwin" else QFont("Consolas", 9))
         v.addWidget(self.file_list, 1)
 
         usage_box = QGroupBox()
@@ -893,9 +987,7 @@ class MainWindow(QMainWindow):
             nh.addWidget(self.nvidia_install_btn)
         sg.addLayout(nh)
 
-        self.sys_log = QPlainTextEdit()
-        self.sys_log.setReadOnly(True)
-        self.sys_log.setMaximumHeight(80)
+        self.sys_log = self._log_panel(max_height=80)
         sg.addWidget(self.sys_log)
         v.addWidget(sb)
 
@@ -921,9 +1013,7 @@ class MainWindow(QMainWindow):
             brow.addWidget(self.cuda_install_btn)
         brow.addStretch()
         cl.addLayout(brow)
-        self.cuda_log = QPlainTextEdit()
-        self.cuda_log.setReadOnly(True)
-        self.cuda_log.setMaximumHeight(100)
+        self.cuda_log = self._log_panel(max_height=100)
         cl.addWidget(self.cuda_log)
         v.addWidget(cg)
 
@@ -947,8 +1037,7 @@ class MainWindow(QMainWindow):
         ebrow.addWidget(self.env_install_btn)
         ebrow.addStretch()
         el.addLayout(ebrow)
-        self.env_log = QPlainTextEdit()
-        self.env_log.setReadOnly(True)
+        self.env_log = self._log_panel()
         el.addWidget(self.env_log)
         v.addWidget(eg)
 
@@ -969,9 +1058,7 @@ class MainWindow(QMainWindow):
             self.bt_install_btn.clicked.connect(self._ctrl.install_build_tools)
             bth.addWidget(self.bt_install_btn)
             btl.addLayout(bth)
-            self.build_tools_log_view = QPlainTextEdit()
-            self.build_tools_log_view.setReadOnly(True)
-            self.build_tools_log_view.setMaximumHeight(80)
+            self.build_tools_log_view = self._log_panel(max_height=80)
             btl.addWidget(self.build_tools_log_view)
             v.addWidget(btg)
 
@@ -1048,10 +1135,8 @@ class MainWindow(QMainWindow):
         chat_grp = QGroupBox()
         self._tr_reg(chat_grp, "test_chat_title", "title")
         cl = QVBoxLayout(chat_grp)
-        self.test_chat_view = QPlainTextEdit()
-        self.test_chat_view.setReadOnly(True)
+        self.test_chat_view = self._log_panel(mono=True)
         self._tr_reg(self.test_chat_view, "test_chat_empty", "placeholder")
-        self.test_chat_view.setFont(QFont("Menlo", 11) if sys.platform == "darwin" else QFont("Consolas", 10))
         cl.addWidget(self.test_chat_view, 1)
 
         ph = QHBoxLayout()
