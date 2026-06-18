@@ -94,16 +94,24 @@ def _ss() -> str:
     QTabWidget::pane { border: 1px solid #3a3f47; border-radius: 8px; top: -1px; background: #1a1d21; }
     QTabWidget::tab-bar { background: #1a1d21; }
     QTabBar { background: #1a1d21; }
-    QTabBar::tab { background: #252830; padding: 10px 6px 10px 18px; margin-right: 2px; }
-    QTabBar::tab:selected { border-bottom: 2px solid #3b82f6; color: #fff; font-weight: 600; }
+    QTabBar::tab {
+      background: #252830; padding: 10px 8px 10px 18px; margin-right: 2px;
+      border-top-left-radius: 6px; border-top-right-radius: 6px;
+    }
+    QTabBar::tab:selected {
+      background: #2b313b; border-bottom: 2px solid #3b82f6;
+      color: #fff; font-weight: 600;
+    }
     QTabBar::tab:!selected { color: #6b7280; }
     QLabel#tabStepBadge {
-      min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px;
-      border-radius: 11px; font-size: 11px; font-weight: 600;
-      background: #3a3f47; color: #9ca3af;
+      min-width: 24px; max-width: 24px; min-height: 20px; max-height: 20px;
+      border-radius: 10px; border: 1px solid #4b5563;
+      font-size: 11px; font-weight: 700;
+      background: #20242b; color: #aeb6c2;
     }
     QLabel#tabStepBadge[selected="true"] {
-      background: #3b82f6; color: #ffffff; font-weight: 700;
+      background: #2563eb; border: 1px solid #60a5fa;
+      color: #ffffff;
     }
     """
 
@@ -124,7 +132,7 @@ def _make_tab_step_badge(step: int) -> QLabel:
     badge = QLabel(str(step))
     badge.setObjectName("tabStepBadge")
     badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    badge.setFixedSize(22, 22)
+    badge.setFixedSize(24, 20)
     _style_tab_step_badge(badge, selected=False)
     return badge
 
@@ -319,7 +327,7 @@ class MainWindow(QMainWindow):
             wrap = QWidget()
             wrap.setStyleSheet("background: transparent;")
             row = QHBoxLayout(wrap)
-            row.setContentsMargins(10, 0, 2, 0)
+            row.setContentsMargins(10, 0, 4, 0)
             row.setSpacing(0)
             row.addWidget(badge)
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, wrap)
@@ -1305,4 +1313,3 @@ class MainWindow(QMainWindow):
             self._overlay.raise_()
         else:
             self._overlay.hide()
-
