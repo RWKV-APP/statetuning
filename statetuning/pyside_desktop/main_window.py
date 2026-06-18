@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
             wrap = QWidget()
             wrap.setStyleSheet("background: transparent;")
             row = QHBoxLayout(wrap)
-            row.setContentsMargins(4, 0, 4, 0)
+            row.setContentsMargins(0, 0, 16, 0)
             row.setSpacing(0)
             row.addWidget(badge)
             bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, wrap)
