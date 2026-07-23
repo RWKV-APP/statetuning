@@ -156,6 +156,7 @@ def _ss(theme: dict[str, str]) -> str:
             f"QRadioButton::indicator {{ width: 14px; height: 14px; border-radius: 7px; border: 2px solid {theme['button_border']}; background: rgba(255, 255, 255, 0.92); }}",
             f"QRadioButton::indicator:hover {{ border: 2px solid {theme['accent']}; }}",
             f"QRadioButton::indicator:checked {{ border: 2px solid {theme['accent']}; background: {theme['accent']}; }}",
+            "QWidget#brandBlock { background: transparent; }",
             "QTabWidget::pane { border: none; background: transparent; }",
             "QScrollArea { border: none; background: transparent; }",
         ]
@@ -508,6 +509,7 @@ class MainWindow(QMainWindow):
         side_layout.setSpacing(8)
 
         brand = QWidget()
+        brand.setObjectName("brandBlock")
         brand_layout = QVBoxLayout(brand)
         brand_layout.setContentsMargins(0, 2, 0, 10)
         brand_layout.setSpacing(8)
@@ -738,21 +740,12 @@ class MainWindow(QMainWindow):
         )
         header_layout.addWidget(header_title)
 
-        fl = QFormLayout()
-        fl.setContentsMargins(0, 0, 0, 0)
-        fl.setHorizontalSpacing(16)
-        fl.setVerticalSpacing(8)
-        fl.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        fl.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        fl.addRow(
-            self._field_label("label_pretrained_pth"),
-            self._line_widget("hint_model_path", "model_path", "file_pth"),
-        )
+        header_layout.addWidget(self._tr_reg(QLabel(), "label_pretrained_pth"))
+        header_layout.addLayout(self._line("hint_model_path", "model_path", "file_pth"))
         self.detect_lbl = QLabel()
         self.detect_lbl.setStyleSheet(f"color: {self._ui['muted']}; font-size: 12px;")
         self.detect_lbl.setVisible(False)
-        fl.addRow("", self.detect_lbl)
-        header_layout.addLayout(fl)
+        header_layout.addWidget(self.detect_lbl)
         v.addWidget(header)
 
         presets = QGroupBox()
