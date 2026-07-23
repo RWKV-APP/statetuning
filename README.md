@@ -139,7 +139,7 @@ python main.py
 python -m main
 ```
 
-若未安装 PySide6，程序会自动执行 `pip install -r pyside_desktop/requirements.txt` 进行安装。
+若未安装 PySide6，程序会自动在 `pyside_desktop/.venv` 中创建虚拟环境并安装依赖，不会直接写入系统 Python。安装时会按默认源和常见镜像自动重试，也可通过 `PIP_INDEX_URL` 指定自己的镜像源。
 
 ### 首次使用
 

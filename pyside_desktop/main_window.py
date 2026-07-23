@@ -1,32 +1,37 @@
-"""Main window: mirrors lib/home_page.dart layout (dark theme, tabs)."""
+"""Main window: sidebar navigation with stacked pages."""
 
 from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QModelIndex, Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
-    QTabBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -45,96 +50,193 @@ _TAB_KEYS = (
     "tab_test",
 )
 
+_TAB_ICON_KEYS = (
+    "model",
+    "data",
+    "train",
+    "monitor",
+    "export",
+    "settings",
+    "test",
+)
 
-def _ss() -> str:
-    return """
-    QMainWindow, QWidget { background: #1a1d21; color: #e5e7eb; }
-    QLabel { background: transparent; }
-    QGroupBox { font-weight: 600; border: 1px solid #3a3f47; border-radius: 10px;
-                margin-top: 10px; padding: 16px; background: #252830; }
-    QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }
-    QLineEdit, QPlainTextEdit, QComboBox {
-      background: #1a1d21; border: 1px solid #3a3f47; border-radius: 8px;
-      padding: 8px 12px; selection-background-color: #3b82f6;
+
+def _ui_theme() -> dict[str, str]:
+    if sys.platform == "darwin":
+        return {
+            "window": "rgba(241, 245, 251, 0.94)",
+            "sidebar": "rgba(255, 255, 255, 0.58)",
+            "content": "rgba(255, 255, 255, 0.56)",
+            "header": "rgba(255, 255, 255, 0.66)",
+            "surface": "rgba(255, 255, 255, 0.80)",
+            "surface2": "rgba(248, 250, 255, 0.88)",
+            "border": "rgba(214, 224, 235, 0.92)",
+            "border_soft": "rgba(229, 236, 244, 0.84)",
+            "text": "#102033",
+            "text_strong": "#0f172a",
+            "muted": "#64748b",
+            "muted2": "#475569",
+            "accent": "#0a84ff",
+            "accent_dark": "#0066d6",
+            "danger": "#ff3b30",
+            "button_bg": "rgba(255, 255, 255, 0.76)",
+            "button_hover": "rgba(246, 249, 253, 0.98)",
+            "button_text": "#102033",
+            "button_border": "rgba(207, 216, 228, 0.86)",
+            "chip_bg": "rgba(248, 250, 255, 0.8)",
+        }
+    return {
+        "window": "#eef1f7",
+        "sidebar": "#f7f9fc",
+        "content": "#ffffff",
+        "header": "#ffffff",
+        "surface": "#ffffff",
+        "surface2": "#f8fbff",
+        "border": "#dfe5ee",
+        "border_soft": "#e4ebf3",
+        "text": "#1f2937",
+        "text_strong": "#0f172a",
+        "muted": "#6b7280",
+        "muted2": "#475569",
+        "accent": "#1d4ed8",
+        "accent_dark": "#1745be",
+        "danger": "#dc2626",
+        "button_bg": "#ffffff",
+        "button_hover": "#f3f7fb",
+        "button_text": "#1f2937",
+        "button_border": "#d7dee8",
+        "chip_bg": "#f3f6fb",
     }
-    QLabel#fieldLabel {
-      color: #9ca3af; font-size: 13px; padding: 6px 16px 6px 0;
-    }
-    QLabel#valueDisplay {
-      color: #ffffff; font-size: 15px; font-weight: 600; padding: 6px 0;
-      background: transparent;
-    }
-    QLabel#hintDisplay {
-      color: #9ca3af; padding: 4px 0; background: transparent;
-    }
-    QPlainTextEdit#logPanel {
-      background: #252830; border: none; border-radius: 8px;
-      padding: 10px 12px; color: #d1d5db;
-    }
-    QPlainTextEdit#logPanel:focus { border: none; outline: none; }
-    QComboBox QAbstractItemView {
-      background: #1a1d21; color: #e5e7eb; outline: 0;
-      border: 1px solid #3a3f47; padding: 4px;
-      selection-background-color: #3b82f6; selection-color: #ffffff;
-    }
-    QPushButton {
-      background: #3b82f6; color: white; border: none; border-radius: 10px;
-      padding: 10px 16px;
-    }
-    QPushButton:hover { background: #2563eb; }
-    QPushButton:disabled { background: #3b82f660; color: #ffffff80; }
-    QPushButton#secondary { background: #3a3f47; }
-    QPushButton#secondary:checked {
-      background: #2563eb;
-      border: 1px solid #60a5fa;
-      color: #ffffff;
-    }
-    QPushButton#green { background: #22c55e; }
-    QPushButton#red { background: #ef4444; }
-    QTabWidget::pane { border: 1px solid #3a3f47; border-radius: 8px; top: -1px; background: #1a1d21; }
-    QTabWidget::tab-bar { background: #1a1d21; }
-    QTabBar { background: #1a1d21; }
-    QTabBar::tab {
-      background: #252830; padding: 10px 8px 10px 18px; margin-right: 2px;
-      border-top-left-radius: 6px; border-top-right-radius: 6px;
-    }
-    QTabBar::tab:selected {
-      background: #2b313b; border-bottom: 2px solid #3b82f6;
-      color: #fff; font-weight: 600;
-    }
-    QTabBar::tab:!selected { color: #6b7280; }
-    QLabel#tabStepBadge {
-      min-width: 18px; max-width: 18px; min-height: 16px; max-height: 16px;
-      border-radius: 8px; border: 1px solid #4b5563;
-      font-size: 10px; font-weight: 700;
-      background: #20242b; color: #aeb6c2;
-    }
-    QLabel#tabStepBadge[selected="true"] {
-      background: #2563eb; border: 1px solid #60a5fa;
-      color: #ffffff;
-    }
-    """
+
+
+def _ss(theme: dict[str, str]) -> str:
+    return "\n".join(
+        [
+            f"QMainWindow, QWidget {{ background: {theme['window']}; color: {theme['text']}; }}",
+            "QLabel { background: transparent; }",
+            f"QFrame#sidebar {{ background: {theme['sidebar']}; border: 1px solid {theme['border']}; border-radius: 20px; }}",
+            f"QFrame#contentShell {{ background: {theme['content']}; border: 1px solid {theme['border']}; border-radius: 20px; }}",
+            f"QFrame#headerBar {{ background: {theme['header']}; border: 1px solid {theme['border']}; border-radius: 16px; }}",
+            f"QFrame#bottomStatusBar {{ background: {theme['surface']}; border-top: 1px solid {theme['border']}; }}",
+            "QFrame#sidebarFooter { background: transparent; border: none; }",
+            f"QLabel#brandMark {{ background: {theme['accent']}; color: white; border-radius: 10px; font-size: 15px; font-weight: 700; }}",
+            f"QLabel#pageTitle {{ color: {theme['text_strong']}; font-size: 19px; font-weight: 700; }}",
+            f"QLabel#pageSubtitle {{ color: {theme['muted']}; font-size: 12px; }}",
+            f"QLabel#statusChip {{ background: {theme['chip_bg']}; border: 1px solid {theme['border_soft']}; border-radius: 10px; color: {theme['muted2']}; padding: 8px 11px; font-size: 12px; font-weight: 600; }}",
+            f"QLabel#statusDot {{ background: {theme['accent']}; border-radius: 4px; min-width: 8px; max-width: 8px; min-height: 8px; max-height: 8px; }}",
+            f"QLabel#bottomStatusText {{ color: {theme['muted2']}; font-size: 12px; font-weight: 600; }}",
+            f"QLabel#bottomStatusDivider {{ color: {theme['border']}; font-size: 12px; }}",
+            "QListWidget#navList { background: transparent; border: none; outline: none; }",
+            f"QListWidget#navList::item {{ background: transparent; color: {theme['muted2']}; border: 1px solid transparent; border-radius: 13px; padding: 10px 10px 10px 10px; margin: 2px 2px; min-height: 46px; font-size: 18px; font-weight: 750; }}",
+            "QListWidget#navList::item:hover { background: #eef3fb; }",
+            f"QListWidget#navList::item:selected {{ background: {theme['surface2']}; color: {theme['accent_dark']}; border: 1px solid {theme['border_soft']}; border-left: 4px solid {theme['accent']}; padding-left: 8px; }}",
+            f"QGroupBox {{ font-weight: 600; border: 1px solid {theme['border_soft']}; border-radius: 14px; margin-top: 10px; padding: 12px; background: {theme['surface']}; }}",
+            f"QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 6px; color: {theme['muted2']}; font-size: 12px; font-weight: 700; }}",
+            f"QLineEdit, QPlainTextEdit, QComboBox {{ background: {theme['surface']}; border: 1px solid {theme['button_border']}; border-radius: 12px; padding: 0 12px; min-height: 38px; font-size: 13px; color: {theme['text_strong']}; selection-background-color: {theme['accent']}; }}",
+            "QLineEdit::placeholder, QPlainTextEdit::placeholder { color: #94a3b8; }",
+            f"QLabel#fieldLabel {{ color: {theme['muted']}; font-size: 12px; font-weight: 600; padding: 4px 14px 4px 0; }}",
+            f"QLabel#valueDisplay {{ color: {theme['text_strong']}; font-size: 14px; font-weight: 600; padding: 6px 0; background: transparent; }}",
+            f"QLabel#hintDisplay {{ color: {theme['muted']}; padding: 4px 0; background: transparent; }}",
+            f"QFrame#fieldPanel, QFrame#metricPanel {{ background: {theme['surface2']}; border: 1px solid {theme['border_soft']}; border-radius: 14px; }}",
+            f"QPlainTextEdit#logPanel {{ background: {theme['surface2']}; border: 1px solid {theme['border_soft']}; border-radius: 12px; padding: 10px 12px; color: {theme['muted2']}; }}",
+            "QPlainTextEdit#logPanel:focus { border: none; outline: none; }",
+            f"QComboBox QAbstractItemView {{ background: {theme['surface']}; color: {theme['text']}; outline: 0; border: 1px solid {theme['button_border']}; padding: 4px; selection-background-color: {theme['accent']}; selection-color: #ffffff; }}",
+            f"QPushButton {{ background: {theme['button_bg']}; color: {theme['button_text']}; border: 1px solid {theme['button_border']}; border-radius: 12px; padding: 0 12px; min-height: 38px; font-size: 13px; font-weight: 600; }}",
+            f"QPushButton:hover {{ background: {theme['button_hover']}; }}",
+            "QPushButton:disabled { background: rgba(243, 246, 250, 0.55); color: #94a3b8; }",
+            f"QPushButton#primary {{ background: {theme['accent']}; color: white; border: 1px solid {theme['accent']}; }}",
+            f"QPushButton#primary:hover {{ background: {theme['accent_dark']}; }}",
+            f"QPushButton#secondary {{ background: {theme['button_bg']}; }}",
+            f"QPushButton#secondary:checked {{ background: {theme['surface2']}; border: 1px solid {theme['border_soft']}; color: {theme['accent_dark']}; }}",
+            f"QPushButton#green {{ background: {theme['accent']}; color: #ffffff; border: 1px solid {theme['accent']}; }}",
+            f"QPushButton#red {{ background: {theme['danger']}; color: #ffffff; border: 1px solid {theme['danger']}; }}",
+            f"QRadioButton {{ background: rgba(255, 255, 255, 0.42); border: 1px solid transparent; border-radius: 12px; color: {theme['text_strong']}; font-size: 14px; font-weight: 650; spacing: 8px; padding: 6px 16px 6px 12px; min-height: 32px; }}",
+            f"QRadioButton:hover {{ background: {theme['button_hover']}; border: 1px solid {theme['border_soft']}; }}",
+            f"QRadioButton:checked {{ background: rgba(10, 132, 255, 0.12); border: 1px solid rgba(10, 132, 255, 0.28); color: {theme['accent_dark']}; }}",
+            f"QRadioButton::indicator {{ width: 14px; height: 14px; border-radius: 7px; border: 2px solid {theme['button_border']}; background: rgba(255, 255, 255, 0.92); }}",
+            f"QRadioButton::indicator:hover {{ border: 2px solid {theme['accent']}; }}",
+            f"QRadioButton::indicator:checked {{ border: 2px solid {theme['accent']}; background: {theme['accent']}; }}",
+            "QTabWidget::pane { border: none; background: transparent; }",
+            "QScrollArea { border: none; background: transparent; }",
+        ]
+    )
 
 
 def tr(k: str, **p: str) -> str:
     return i18n.tr(k, **p)
 
 
-def _style_tab_step_badge(badge: QLabel, *, selected: bool) -> None:
-    badge.setProperty("selected", selected)
-    style = badge.style()
-    style.unpolish(badge)
-    style.polish(badge)
-    badge.update()
+def _nav_icon(kind: str, color: str, size: int = 20) -> QIcon:
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    pen = QPen(QColor(color))
+    pen.setWidthF(2.3)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
 
-
-def _make_tab_step_badge(step: int) -> QLabel:
-    badge = QLabel(str(step))
-    badge.setObjectName("tabStepBadge")
-    badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    badge.setFixedSize(18, 16)
-    _style_tab_step_badge(badge, selected=False)
-    return badge
+    s = float(size)
+    m = 2.5
+    if kind == "model":
+        painter.drawRoundedRect(m + 1, m + 2, s - 2 * m - 2, s - 2 * m - 2, 2, 2)
+        painter.drawLine(m + 1, m + 5, s - m - 1, m + 5)
+        painter.drawLine(m + 3, m + 2, m + 3, s - m - 2)
+    elif kind == "data":
+        painter.drawEllipse(m + 1, m + 1.5, s - 2 * m - 2, 4)
+        painter.drawLine(m + 1, m + 3.5, m + 1, s - m - 4)
+        painter.drawLine(s - m - 1, m + 3.5, s - m - 1, s - m - 4)
+        painter.drawEllipse(m + 1, s - m - 5.5, s - 2 * m - 2, 4)
+        painter.drawLine(m + 1, s / 2, s - m - 1, s / 2)
+        painter.drawLine(m + 1, s / 2 + 4, s - m - 1, s / 2 + 4)
+    elif kind == "train":
+        painter.drawLine(m + 2, m + 4, s - m - 2, m + 4)
+        painter.drawLine(m + 2, s / 2, s - m - 2, s / 2)
+        painter.drawLine(m + 2, s - m - 4, s - m - 2, s - m - 4)
+        painter.drawEllipse(m + 3, m + 2.8, 3, 3)
+        painter.drawEllipse(s - m - 6, s / 2 - 1.2, 3, 3)
+        painter.drawEllipse(m + 6, s - m - 5.2, 3, 3)
+    elif kind == "monitor":
+        painter.drawRect(m + 1, m + 1.5, s - 2 * m - 2, s - 2 * m - 5)
+        painter.drawLine(m + 3, s - m - 3, s - m - 3, s - m - 3)
+        path = QPainterPath()
+        path.moveTo(m + 3, s - m - 6)
+        path.lineTo(m + 6, s / 2)
+        path.lineTo(m + 9, s / 2 + 2)
+        path.lineTo(s - m - 4, m + 5)
+        painter.drawPath(path)
+    elif kind == "export":
+        painter.drawRect(m + 2, s - m - 7, s - 2 * m - 4, 3)
+        painter.drawLine(s / 2, m + 2, s / 2, s - m - 6)
+        painter.drawLine(s / 2, m + 2, s / 2 - 3, m + 5)
+        painter.drawLine(s / 2, m + 2, s / 2 + 3, m + 5)
+    elif kind == "settings":
+        painter.drawEllipse(m + 4, m + 4, s - 2 * m - 8, s - 2 * m - 8)
+        for a in range(0, 360, 60):
+            path = QPainterPath()
+            path.moveTo(s / 2, s / 2)
+            if a == 0:
+                path.lineTo(s / 2, m + 1.5)
+            elif a == 60:
+                path.lineTo(s - m - 2, m + 4.5)
+            elif a == 120:
+                path.lineTo(s - m - 2, s - m - 4.5)
+            elif a == 180:
+                path.lineTo(s / 2, s - m - 1.5)
+            elif a == 240:
+                path.lineTo(m + 2, s - m - 4.5)
+            else:
+                path.lineTo(m + 2, m + 4.5)
+            painter.drawPath(path)
+    elif kind == "test":
+        painter.drawRoundedRect(m + 1.5, m + 2.5, s - 2 * m - 3, s - 2 * m - 6, 3, 3)
+        painter.drawLine(m + 5, s - m - 4, m + 7, s - m - 1)
+        painter.drawLine(m + 6, s / 2, s - m - 5, s / 2)
+        painter.drawLine(m + 6, s / 2 + 3, s / 2, s / 2 + 3)
+    painter.end()
+    return QIcon(pm)
 
 
 class _NoElideDelegate(QStyledItemDelegate):
@@ -183,10 +285,13 @@ class MainWindow(QMainWindow):
         self._ctrl = HomeController()
         self._ctrl.changed.connect(self.refresh)
         self._ctrl.toast.connect(self._on_toast)
+        self._ui = _ui_theme()
 
         self.setWindowTitle(tr("app_title"))
-        self.setMinimumSize(1040, 720)
-        self.setStyleSheet(_ss())
+        self.setMinimumSize(1200, 780)
+        self.setStyleSheet(_ss(self._ui))
+        if sys.platform == "darwin":
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -206,15 +311,10 @@ class MainWindow(QMainWindow):
         self._test_loading_label: QLabel | None = None
         self._test_loading_spinner_timer: QTimer | None = None
         self._test_loading_spinner_index = 0
-        self._tab_step_badges: list[QLabel] = []
-
-        self._build_top_bar(root)
 
         self.tabs = QTabWidget()
-        # Document mode uses native macOS tab chrome; disable for a single dark tab strip.
-        self.tabs.setDocumentMode(False)
-        self.tabs.tabBar().setDrawBase(False)
-        root.addWidget(self.tabs, 1)
+        self.tabs.setDocumentMode(True)
+        self.tabs.tabBar().hide()
 
         self._tab_model = self._wrap_scroll(self._page_model())
         self._tab_data = self._wrap_scroll(self._page_data())
@@ -237,14 +337,38 @@ class MainWindow(QMainWindow):
             _TAB_KEYS,
         ):
             self.tabs.addTab(page, tr(key))
-        self._setup_tab_step_badges()
-
         self.tabs.currentChanged.connect(self._on_tab_changed)
+
+        body = QWidget()
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(12, 12, 12, 12)
+        body_layout.setSpacing(12)
+        root.addWidget(body, 1)
+
+        self._build_sidebar(body_layout)
+
+        content = QWidget()
+        content.setObjectName("contentShell")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(18, 16, 18, 18)
+        content_layout.setSpacing(12)
+        body_layout.addWidget(content, 1)
+
+        content_layout.addWidget(self.tabs, 1)
+
+        self._build_bottom_status_bar(root)
 
         self._overlay = QLabel(self)
         self._overlay.setAlignment(Qt.AlignCenter)
-        self._overlay.setStyleSheet("background: rgba(0,0,0,0.55); color: white; font-size: 16px;")
+        self._overlay.setStyleSheet(
+            f"background: rgba(15,23,42,0.38); color: {self._ui['surface']}; font-size: 16px;"
+        )
         self._overlay.hide()
+
+        self.tabs.setCurrentIndex(0)
+        self._sync_nav_selection(0)
+        self._sync_shell_header()
+        self._normalize_control_sizes()
 
         QTimer.singleShot(0, self._boot)
         self._sync_all_inputs_from_ctrl()
@@ -286,7 +410,15 @@ class MainWindow(QMainWindow):
             self._apply_tr_widget(item[0], item[1], item[2])
         for i, key in enumerate(_TAB_KEYS):
             self.tabs.setTabText(i, tr(key))
-        self._update_tab_step_badges()
+        if hasattr(self, "nav_list"):
+            for i, key in enumerate(_TAB_KEYS):
+                item = self.nav_list.item(i)
+                if item is not None:
+                    item.setText(tr(key))
+        if hasattr(self, "nav_list"):
+            self._sync_nav_selection(self.tabs.currentIndex())
+        if hasattr(self, "page_title"):
+            self.page_title.setText(self.tabs.tabText(self.tabs.currentIndex()))
         if getattr(self, "_preset_buttons", None):
             for p, btn in self._preset_buttons:
                 btn.setText(tr("preset_custom") if p.label == kCustomPresetLabel else p.label)
@@ -319,30 +451,151 @@ class MainWindow(QMainWindow):
                 le.setText(str(v))
                 le.blockSignals(False)
 
-    def _setup_tab_step_badges(self) -> None:
-        bar = self.tabs.tabBar()
-        self._tab_step_badges = []
-        for i in range(len(_TAB_KEYS)):
-            badge = _make_tab_step_badge(i + 1)
-            wrap = QWidget()
-            wrap.setStyleSheet("background: transparent;")
-            row = QHBoxLayout(wrap)
-            row.setContentsMargins(0, 0, 16, 0)
-            row.setSpacing(0)
-            row.addWidget(badge)
-            bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, wrap)
-            self._tab_step_badges.append(badge)
-        self._update_tab_step_badges()
-
-    def _update_tab_step_badges(self, selected_idx: int | None = None) -> None:
-        if selected_idx is None:
-            selected_idx = self.tabs.currentIndex()
-        for i, badge in enumerate(self._tab_step_badges):
-            _style_tab_step_badge(badge, selected=(i == selected_idx))
-
     def _on_tab_changed(self, idx: int) -> None:
         self._ctrl.set_tab_index(int(idx))
-        self._update_tab_step_badges(idx)
+        self._sync_nav_selection(idx)
+        self._sync_shell_header()
+
+    def _sync_nav_selection(self, idx: int) -> None:
+        if not hasattr(self, "nav_list"):
+            return
+        self.nav_list.blockSignals(True)
+        self.nav_list.setCurrentRow(max(0, idx))
+        self.nav_list.blockSignals(False)
+        for i, icon_key in enumerate(_TAB_ICON_KEYS):
+            item = self.nav_list.item(i)
+            if item is not None:
+                color = self._ui["accent"] if i == idx else self._ui["muted2"]
+                item.setIcon(_nav_icon(icon_key, color))
+
+    def _sync_shell_header(self) -> None:
+        if hasattr(self, "page_title"):
+            self.page_title.setText(self.tabs.tabText(self.tabs.currentIndex()))
+        if hasattr(self, "page_subtitle"):
+            self.page_subtitle.setText(self._ctrl.status)
+        if hasattr(self, "gpu_label"):
+            self.gpu_label.setText(tr("gpu_chip", v=self._ctrl.gpu_info) if self._ctrl.env_ready else self._ctrl.gpu_info)
+        if hasattr(self, "status_label"):
+            self.status_label.setText(self._ctrl.status)
+
+    def _normalize_control_sizes(self) -> None:
+        for le in self.findChildren(QLineEdit):
+            le.setFixedHeight(38)
+            le.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        for cb in self.findChildren(QComboBox):
+            cb.setFixedHeight(38)
+            cb.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        if hasattr(self, "lang_combo"):
+            self.lang_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        for btn in self.findChildren(QPushButton):
+            label = btn.text().strip()
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+            if not label or label == "…":
+                btn.setFixedSize(38, 38)
+            else:
+                btn.setMinimumHeight(38)
+                btn.setMinimumWidth(0)
+        for box in self.findChildren(QGroupBox):
+            box.setContentsMargins(0, 0, 0, 0)
+
+    def _build_sidebar(self, parent_layout: QHBoxLayout) -> None:
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(232)
+        side_layout = QVBoxLayout(sidebar)
+        side_layout.setContentsMargins(10, 12, 10, 12)
+        side_layout.setSpacing(8)
+
+        brand = QWidget()
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 2, 0, 10)
+        brand_layout.setSpacing(8)
+        mark = QLabel("ST")
+        mark.setObjectName("brandMark")
+        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark.setFixedSize(34, 34)
+        brand_layout.addWidget(mark, 0, Qt.AlignmentFlag.AlignHCenter)
+        brand_sub = QLabel("RWKV state tuning")
+        brand_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_sub.setStyleSheet(
+            f"font-size: 14px; font-weight: 700; color: {self._ui['text_strong']};"
+        )
+        brand_layout.addWidget(brand_sub)
+        side_layout.addWidget(brand)
+
+        self.nav_list = QListWidget()
+        self.nav_list.setObjectName("navList")
+        self.nav_list.setSpacing(0)
+        self.nav_list.setFrameShape(QFrame.Shape.NoFrame)
+        self.nav_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav_list.setIconSize(QSize(20, 20))
+        self.nav_list.setUniformItemSizes(True)
+        self.nav_list.currentRowChanged.connect(self._on_nav_changed)
+        for idx, key in enumerate(_TAB_KEYS):
+            item = QListWidgetItem(tr(key))
+            item.setData(Qt.ItemDataRole.UserRole, idx)
+            item.setSizeHint(QSize(0, 46))
+            item.setIcon(_nav_icon(_TAB_ICON_KEYS[idx], self._ui["muted2"]))
+            self.nav_list.addItem(item)
+        row_h = max(46, self.nav_list.sizeHintForRow(0) if self.nav_list.count() else 46)
+        self.nav_list.setFixedHeight(row_h * self.nav_list.count() + 10)
+        side_layout.addWidget(self.nav_list)
+
+        side_layout.addStretch()
+
+        footer = QFrame()
+        footer.setObjectName("sidebarFooter")
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(4, 0, 4, 2)
+        footer_layout.setSpacing(8)
+
+        self.lang_combo = _WidePopupComboBox()
+        self.lang_combo.addItem("English", "en_US")
+        self.lang_combo.addItem("简体中文", "zh_CN")
+        self.lang_combo.addItem("繁體中文", "zh_TW")
+        self.lang_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.lang_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        cur = i18n.current_locale()
+        idx = max(0, self.lang_combo.findData(cur))
+        self.lang_combo.setCurrentIndex(idx)
+        self.lang_combo.currentIndexChanged.connect(self._on_lang)
+        footer_layout.addWidget(self.lang_combo)
+        side_layout.addWidget(footer)
+
+        parent_layout.addWidget(sidebar)
+
+    def _build_bottom_status_bar(self, parent_layout: QVBoxLayout) -> None:
+        bar = QFrame()
+        bar.setObjectName("bottomStatusBar")
+        bar.setFixedHeight(34)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(10)
+
+        dot = QLabel()
+        dot.setObjectName("statusDot")
+        row.addWidget(dot)
+
+        self.status_label = QLabel()
+        self.status_label.setObjectName("bottomStatusText")
+        row.addWidget(self.status_label)
+
+        sep = QLabel("|")
+        sep.setObjectName("bottomStatusDivider")
+        row.addWidget(sep)
+
+        self.gpu_label = QLabel()
+        self.gpu_label.setObjectName("bottomStatusText")
+        row.addWidget(self.gpu_label)
+
+        row.addStretch()
+        parent_layout.addWidget(bar)
+
+    def _on_nav_changed(self, idx: int) -> None:
+        if idx >= 0 and self.tabs.currentIndex() != idx:
+            self.tabs.setCurrentIndex(idx)
 
     def _on_toast(self, title: str, msg: str) -> None:
         QMessageBox.information(self, title, msg)
@@ -367,37 +620,6 @@ class MainWindow(QMainWindow):
         self.sum_labels["bse"].setText(f"{c.batch_size} / {c.num_steps} / {c.num_epochs}")
         self.sum_labels["lr"].setText(c.learning_rate)
 
-    def _build_top_bar(self, parent_layout: QVBoxLayout) -> None:
-        bar = QWidget()
-        bar.setStyleSheet("background: #252830; padding: 8px 20px;")
-        h = QHBoxLayout(bar)
-
-        title = QLabel()
-        self._tr_reg(title, "app_title")
-        title.setStyleSheet("font-size: 20px; font-weight: 600; color: white;")
-        h.addWidget(title)
-        h.addStretch()
-
-        self.lang_combo = _WidePopupComboBox()
-        self.lang_combo.addItem("English", "en_US")
-        self.lang_combo.addItem("简体中文", "zh_CN")
-        self.lang_combo.addItem("繁體中文", "zh_TW")
-        self.lang_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        cur = i18n.current_locale()
-        idx = max(0, self.lang_combo.findData(cur))
-        self.lang_combo.setCurrentIndex(idx)
-        self.lang_combo.currentIndexChanged.connect(self._on_lang)
-        h.addWidget(self.lang_combo)
-
-        self.gpu_label = QLabel()
-        self.gpu_label.setStyleSheet("color: #b0b5bc; font-size: 13px;")
-        self.status_label = QLabel()
-        self.status_label.setStyleSheet("color: #b0b5bc; font-size: 13px;")
-
-        h.addWidget(self.gpu_label)
-        h.addWidget(self.status_label)
-        parent_layout.addWidget(bar)
-
     def _on_lang(self, _idx: int | None = None) -> None:
         loc = self.lang_combo.currentData()
         if loc:
@@ -407,11 +629,17 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def _wrap_scroll(self, inner: QWidget) -> QWidget:
-        w = QScrollArea()
-        w.setWidgetResizable(True)
-        w.setFrameShape(QScrollArea.NoFrame)
-        w.setWidget(inner)
-        return w
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(0, 0, 18, 0)
+        shell_layout.setSpacing(0)
+        shell_layout.addWidget(inner)
+        scroll.setWidget(shell)
+        return scroll
 
     def _value_label(self, text: str = "", *, wrap: bool = False) -> QLabel:
         lb = QLabel(text)
@@ -446,6 +674,8 @@ class MainWindow(QMainWindow):
 
     def _line(self, placeholder_key: str, attr: str, browse: str | None = None) -> QHBoxLayout:
         row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
         le = QLineEdit()
         self._tr_reg(le, placeholder_key, "placeholder")
         self._inputs[attr] = le
@@ -472,20 +702,67 @@ class MainWindow(QMainWindow):
             row.addWidget(b)
         return row
 
+    def _line_widget(self, placeholder_key: str, attr: str, browse: str | None = None) -> QWidget:
+        w = QWidget()
+        w.setLayout(self._line(placeholder_key, attr, browse))
+        return w
+
+    def _section_panel(self, title_key: str) -> tuple[QFrame, QVBoxLayout]:
+        panel = QFrame()
+        panel.setObjectName("fieldPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+        title = self._tr_reg(QLabel(), title_key)
+        title.setStyleSheet(
+            f"color: {self._ui['text_strong']}; font-size: 13px; font-weight: 700; padding: 0;"
+        )
+        layout.addWidget(title)
+        return panel, layout
+
     def _page_model(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(16)
+
+        header = QFrame()
+        header.setObjectName("fieldPanel")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(14, 12, 14, 12)
+        header_layout.setSpacing(10)
+
+        header_title = QLabel(tr("model_file_path"))
+        header_title.setStyleSheet(
+            f"color: {self._ui['text_strong']}; font-size: 13px; font-weight: 700;"
+        )
+        header_layout.addWidget(header_title)
+
+        fl = QFormLayout()
+        fl.setContentsMargins(0, 0, 0, 0)
+        fl.setHorizontalSpacing(16)
+        fl.setVerticalSpacing(8)
+        fl.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        fl.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        fl.addRow(
+            self._field_label("label_pretrained_pth"),
+            self._line_widget("hint_model_path", "model_path", "file_pth"),
+        )
+        self.detect_lbl = QLabel()
+        self.detect_lbl.setStyleSheet(f"color: {self._ui['muted']}; font-size: 12px;")
+        self.detect_lbl.setVisible(False)
+        fl.addRow("", self.detect_lbl)
+        header_layout.addLayout(fl)
+        v.addWidget(header)
 
         presets = QGroupBox()
         self._tr_reg(presets, "model_specs_preset", "title")
         pv = QHBoxLayout(presets)
+        pv.setContentsMargins(0, 0, 0, 0)
+        pv.setSpacing(8)
         self._preset_buttons = []
         for p in self._ctrl.presets:
-            if p.n_embd == 0:
-                lab = tr("preset_custom")
-            else:
-                lab = p.label
+            lab = tr("preset_custom") if p.n_embd == 0 else p.label
             btn = QPushButton(lab)
             btn.setCheckable(True)
             btn.setObjectName("secondary")
@@ -496,33 +773,39 @@ class MainWindow(QMainWindow):
         # Hide preset section on model tab as requested.
         presets.setVisible(False)
 
-        fp = QGroupBox()
-        self._tr_reg(fp, "model_file_path", "title")
-        fl = QVBoxLayout(fp)
-        fl.addWidget(self._tr_reg(QLabel(), "label_pretrained_pth"))
-        fl.addLayout(self._line("hint_model_path", "model_path", "file_pth"))
-        self.detect_lbl = QLabel()
-        self.detect_lbl.setStyleSheet("color: #9ca3af; font-size: 13px;")
-        fl.addWidget(self.detect_lbl)
-        v.addWidget(fp)
-
-        adv = QGroupBox()
-        self._tr_reg(adv, "modelargs_advanced", "title")
-        sf = QFormLayout(adv)
-        sf.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        sf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        adv, av = self._section_panel("modelargs_advanced")
         self.vocab_e = self._value_label()
-        sf.addRow(self._field_label("label_vocab_size"), self.vocab_e)
         self.n_embd_e = self._value_label()
-        sf.addRow(self._field_label("label_n_embd"), self.n_embd_e)
         self.n_layer_e = self._value_label()
-        sf.addRow(self._field_label("label_n_layer"), self.n_layer_e)
+        rows = (
+            ("label_vocab_size", self.vocab_e),
+            ("label_n_embd", self.n_embd_e),
+            ("label_n_layer", self.n_layer_e),
+        )
+        af = QFormLayout()
+        af.setContentsMargins(0, 0, 0, 0)
+        af.setHorizontalSpacing(18)
+        af.setVerticalSpacing(8)
+        af.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        af.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for label_key, value_widget in rows:
+            value_widget.setStyleSheet(
+                f"color: {self._ui['text_strong']}; font-size: 15px; font-weight: 700; padding: 2px 0;"
+            )
+            af.addRow(self._field_label(label_key), value_widget)
+        av.addLayout(af)
         v.addWidget(adv)
 
         nx = QPushButton()
         self._tr_reg(nx, "next_data_config")
+        nx.setObjectName("secondary")
+        nx.setFixedWidth(184)
         nx.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
-        v.addWidget(nx)
+        nx_row = QHBoxLayout()
+        nx_row.setContentsMargins(0, 0, 0, 0)
+        nx_row.addStretch()
+        nx_row.addWidget(nx)
+        v.addLayout(nx_row)
         v.addStretch()
         return w
 
@@ -537,7 +820,8 @@ class MainWindow(QMainWindow):
         self.vocab_e.setText(str(c.vocab_size))
         self.n_embd_e.setText(str(c.n_embd))
         self.n_layer_e.setText(str(c.n_layer))
-        self.detect_lbl.setText("Loading..." if c.is_detecting_model else "")
+        self.detect_lbl.setText(tr("reading_model_dims") if c.is_detecting_model else "")
+        self.detect_lbl.setVisible(c.is_detecting_model)
         self._sync_model_loading_dialog(c.is_detecting_model)
 
     def _sync_model_loading_dialog(self, is_loading: bool) -> None:
@@ -562,11 +846,11 @@ class MainWindow(QMainWindow):
             lay = QVBoxLayout(dlg)
             spinner = QLabel("◐")
             spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            spinner.setStyleSheet("font-size: 28px; color: #60a5fa;")
+            spinner.setStyleSheet(f"font-size: 28px; color: {self._ui['accent']};")
             lay.addWidget(spinner)
             lab = QLabel(text)
             lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lab.setStyleSheet("font-size: 15px; color: #e5e7eb;")
+            lab.setStyleSheet(f"font-size: 15px; color: {self._ui['muted2']};")
             lay.addWidget(lab)
             self._model_loading_dialog = dlg
             self._model_loading_spinner = spinner
@@ -611,11 +895,11 @@ class MainWindow(QMainWindow):
             lay = QVBoxLayout(dlg)
             spinner = QLabel("◐")
             spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            spinner.setStyleSheet("font-size: 28px; color: #60a5fa;")
+            spinner.setStyleSheet(f"font-size: 28px; color: {self._ui['accent']};")
             lay.addWidget(spinner)
             lab = QLabel(text)
             lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lab.setStyleSheet("font-size: 15px; color: #e5e7eb;")
+            lab.setStyleSheet(f"font-size: 15px; color: {self._ui['muted2']};")
             lay.addWidget(lab)
             self._test_loading_dialog = dlg
             self._test_loading_spinner = spinner
@@ -678,11 +962,11 @@ class MainWindow(QMainWindow):
     def _page_data(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(16)
         v.addWidget(self._tr_reg(QLabel(), "train_repo_desc"))
 
-        repo = QGroupBox()
-        self._tr_reg(repo, "train_repo", "title")
-        rl = QVBoxLayout(repo)
+        repo, rl = self._section_panel("train_repo")
         rl.addWidget(self._tr_reg(QLabel(), "label_repo_path"))
         rl.addLayout(self._line("hint_repo_path_default", "repo_path", "dir"))
         hb = QHBoxLayout()
@@ -698,64 +982,72 @@ class MainWindow(QMainWindow):
         rl.addWidget(self.repo_log_view)
         v.addWidget(repo)
 
-        dt = QGroupBox()
-        self._tr_reg(dt, "train_data", "title")
-        dl = QVBoxLayout(dt)
+        dt, dl = self._section_panel("train_data")
         dl.addWidget(self._tr_reg(QLabel(), "label_jsonl_path"))
         dl.addLayout(self._line("hint_jsonl_pick", "data_path", "file_jsonl"))
         dl.addWidget(self._tr_reg(QLabel(), "data_format_title"))
         fmt = self._tr_reg(QLabel(), "data_format_example_line", "plain")
-        fmt.setStyleSheet("color: #86efac; font-family: monospace;")
+        fmt.setStyleSheet(f"color: {self._ui['accent']}; font-family: monospace;")
         fmt.setWordWrap(True)
         fmt.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         dl.addWidget(fmt)
         v.addWidget(dt)
 
-        od = QGroupBox()
-        self._tr_reg(od, "output_dir_section", "title")
-        ol = QVBoxLayout(od)
-        ol.addWidget(self._tr_reg(QLabel(), "label_output_dir"))
+        od, ol = self._section_panel("output_dir_section")
         ol.addLayout(self._line("hint_output_dir", "output_dir", "out_dir"))
         v.addWidget(od)
 
         nx = QPushButton()
         self._tr_reg(nx, "next_train_params")
+        nx.setObjectName("secondary")
+        nx.setFixedWidth(180)
         nx.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
-        v.addWidget(nx)
+        nx_row = QHBoxLayout()
+        nx_row.addStretch()
+        nx_row.addWidget(nx)
+        v.addLayout(nx_row)
         return w
 
     def _page_train(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(16)
 
-        hp = QGroupBox()
-        self._tr_reg(hp, "train_hyperparams", "title")
-        g = QGridLayout(hp)
+        hp, hg = self._section_panel("train_hyperparams")
+        g = QGridLayout()
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setHorizontalSpacing(14)
+        g.setVerticalSpacing(12)
         self._add_num_row(g, 0, 0, "label_batch_size", "batch_size")
         self._add_num_row(g, 0, 2, "label_num_steps", "num_steps")
         self._add_num_row(g, 1, 0, "label_num_epochs", "num_epochs")
         self._add_text_row(g, 1, 2, "label_lr", "learning_rate")
         self._add_num_row(g, 2, 0, "label_ctx_len", "ctx_len")
-
-        prec = QGroupBox()
-        self._tr_reg(prec, "label_train_precision", "title")
-        ph = QHBoxLayout(prec)
-        self._prec_buttons: list[tuple[TrainingPrecision, QPushButton]] = []
-        for p in TrainingPrecision:
-            b = QPushButton(p.value.upper())
-            b.setObjectName("secondary")
-            b.setCheckable(True)
-            b.setAutoExclusive(True)
-            b.clicked.connect(lambda _=False, x=p: self._set_prec(x))
-            self._prec_buttons.append((p, b))
-            ph.addWidget(b)
-        ph.addStretch()
-        g.addWidget(prec, 3, 0, 1, 4)
+        hg.addLayout(g)
         v.addWidget(hp)
 
-        sm = QGroupBox()
-        self._tr_reg(sm, "config_summary", "title")
-        sf = QFormLayout(sm)
+        prec, ph = self._section_panel("label_train_precision")
+        radio_row = QHBoxLayout()
+        radio_row.setContentsMargins(0, 0, 16, 0)
+        radio_row.setSpacing(12)
+        self._prec_buttons: list[tuple[TrainingPrecision, QRadioButton]] = []
+        self._prec_group = QButtonGroup(w)
+        self._prec_group.setExclusive(True)
+        for p in TrainingPrecision:
+            b = QRadioButton(p.value.upper())
+            b.setMinimumWidth(92)
+            b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            b.toggled.connect(lambda checked=False, x=p: checked and self._set_prec(x))
+            self._prec_group.addButton(b)
+            self._prec_buttons.append((p, b))
+            radio_row.addWidget(b)
+        radio_row.addStretch()
+        ph.addLayout(radio_row)
+        v.addWidget(prec)
+
+        sm, sg = self._section_panel("config_summary")
+        sf = QFormLayout()
         sf.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         sf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.sum_labels = {}
@@ -774,15 +1066,17 @@ class MainWindow(QMainWindow):
             lb = self._value_label(wrap=True)
             sf.addRow(self._field_label(lab_key), lb)
             self.sum_labels[key] = lb
+        sg.addLayout(sf)
         v.addWidget(sm)
 
         row = QHBoxLayout()
         self.train_btn = QPushButton()
         self._tr_reg(self.train_btn, "train_start")
-        self.train_btn.setObjectName("green")
+        self.train_btn.setObjectName("primary")
+        self.train_btn.setFixedWidth(200)
         self.train_btn.clicked.connect(self._start_training_and_open_monitor)
-        row.addWidget(self.train_btn)
         row.addStretch()
+        row.addWidget(self.train_btn)
         v.addLayout(row)
         v.addWidget(self._tr_reg(QLabel(), "train_hint_footer"))
         return w
@@ -829,6 +1123,7 @@ class MainWindow(QMainWindow):
     def _page_monitor(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setSpacing(18)
         hb = QHBoxLayout()
         self.mon_badge = QLabel()
         hb.addWidget(self.mon_badge)
@@ -840,10 +1135,12 @@ class MainWindow(QMainWindow):
         hb.addWidget(self.mon_stop_btn)
         self.mon_export_btn = QPushButton()
         self._tr_reg(self.mon_export_btn, "monitor_export_loss_jsonl")
+        self.mon_export_btn.setObjectName("secondary")
         self.mon_export_btn.clicked.connect(self._export_loss)
         hb.addWidget(self.mon_export_btn)
         self.mon_chart_btn = QPushButton()
         self._tr_reg(self.mon_chart_btn, "monitor_view_loss_chart")
+        self.mon_chart_btn.setObjectName("secondary")
         self.mon_chart_btn.clicked.connect(self._loss_chart)
         hb.addWidget(self.mon_chart_btn)
         cl = QPushButton()
@@ -927,16 +1224,24 @@ class MainWindow(QMainWindow):
     def _page_export(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(16)
+
+        dir_panel, dir_layout = self._section_panel("output_dir_section")
         self.exp_dir_lbl = QLabel()
-        v.addWidget(self.exp_dir_lbl)
+        self.exp_dir_lbl.setWordWrap(True)
+        dir_layout.addWidget(self.exp_dir_lbl)
+        v.addWidget(dir_panel)
 
         hb = QHBoxLayout()
         rf = QPushButton()
         self._tr_reg(rf, "export_refresh_list")
+        rf.setObjectName("secondary")
         rf.clicked.connect(self._ctrl.refresh_output_files)
         hb.addWidget(rf)
         self.exp_export_btn = QPushButton()
         self._tr_reg(self.exp_export_btn, "monitor_export_loss_jsonl")
+        self.exp_export_btn.setObjectName("secondary")
         self.exp_export_btn.clicked.connect(self._export_loss)
         hb.addWidget(self.exp_export_btn)
         hb.addStretch()
@@ -944,11 +1249,11 @@ class MainWindow(QMainWindow):
 
         self.file_list = self._log_panel(mono=True)
         self._tr_reg(self.file_list, "export_no_files_hint", "placeholder")
-        v.addWidget(self.file_list, 1)
+        files_panel, files_layout = self._section_panel("export_output_files")
+        files_layout.addWidget(self.file_list, 1)
+        v.addWidget(files_panel, 1)
 
-        usage_box = QGroupBox()
-        self._tr_reg(usage_box, "export_usage_title", "title")
-        ul = QVBoxLayout(usage_box)
+        usage_box, ul = self._section_panel("export_usage_title")
         ul.addWidget(self._tr_reg(QLabel(), "export_usage_body"))
         v.addWidget(usage_box)
         return w
@@ -956,12 +1261,12 @@ class MainWindow(QMainWindow):
     def _page_settings(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(16)
         v.addWidget(self._tr_reg(QLabel(), "settings_system_intro"))
 
         # ── System Basics ─────────────────────────────────────────────────────
-        sb = QGroupBox()
-        self._tr_reg(sb, "settings_system_basics", "title")
-        sg = QVBoxLayout(sb)
+        sb, sg = self._section_panel("settings_system_basics")
 
         if sys.platform == "win32":
             # winget row (Windows only)
@@ -1000,9 +1305,7 @@ class MainWindow(QMainWindow):
         v.addWidget(sb)
 
         # ── CUDA ──────────────────────────────────────────────────────────────
-        cg = QGroupBox()
-        self._tr_reg(cg, "cuda_section_title", "title")
-        cl = QVBoxLayout(cg)
+        cg, cl = self._section_panel("cuda_section_title")
         self._cuda_home_le = QLineEdit(self._ctrl.cuda_home)
         self._cuda_home_le.textChanged.connect(lambda t: setattr(self._ctrl, "cuda_home", t))
         self._tr_reg(self._cuda_home_le, "cuda_dir_label", "placeholder")
@@ -1011,6 +1314,7 @@ class MainWindow(QMainWindow):
         brow = QHBoxLayout()
         ad = QPushButton()
         self._tr_reg(ad, "btn_auto_detect")
+        ad.setObjectName("secondary")
         ad.clicked.connect(self._ctrl.detect_cuda_home)
         brow.addWidget(ad)
         if sys.platform == "win32":
@@ -1026,12 +1330,11 @@ class MainWindow(QMainWindow):
         v.addWidget(cg)
 
         # ── Environment ───────────────────────────────────────────────────────
-        eg = QGroupBox()
-        self._tr_reg(eg, "env_section_title", "title")
-        el = QVBoxLayout(eg)
+        eg, el = self._section_panel("env_section_title")
         ebrow = QHBoxLayout()
         chk = QPushButton()
         self._tr_reg(chk, "env_check_env")
+        chk.setObjectName("secondary")
         chk.clicked.connect(self._ctrl.check_environment)
         ebrow.addWidget(chk)
         pick_env = QPushButton()
@@ -1041,6 +1344,7 @@ class MainWindow(QMainWindow):
         ebrow.addWidget(pick_env)
         self.env_install_btn = QPushButton()
         self._tr_reg(self.env_install_btn, "btn_install_env")
+        self.env_install_btn.setObjectName("primary")
         self.env_install_btn.clicked.connect(self._ctrl.install_environment)
         ebrow.addWidget(self.env_install_btn)
         ebrow.addStretch()
@@ -1051,9 +1355,7 @@ class MainWindow(QMainWindow):
 
         if sys.platform == "win32":
             # ── Build Tools (Windows only) ────────────────────────────────────
-            btg = QGroupBox()
-            self._tr_reg(btg, "build_tools_section", "title")
-            btl = QVBoxLayout(btg)
+            btg, btl = self._section_panel("build_tools_section")
             bth = QHBoxLayout()
             self.ninja_lbl = QLabel()
             self.msvc_lbl = QLabel()
@@ -1076,10 +1378,10 @@ class MainWindow(QMainWindow):
     def _page_test(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(16)
 
-        load_grp = QGroupBox()
-        self._tr_reg(load_grp, "test_model_load_title", "title")
-        lg = QVBoxLayout(load_grp)
+        load_grp, lg = self._section_panel("test_model_load_title")
 
         # model .pth
         lg.addWidget(self._tr_reg(QLabel(), "label_pretrained_pth"))
@@ -1126,6 +1428,8 @@ class MainWindow(QMainWindow):
         brow = QHBoxLayout()
         load_btn = QPushButton()
         self._tr_reg(load_btn, "btn_load_model")
+        load_btn.setObjectName("primary")
+        load_btn.setFixedWidth(140)
         load_btn.clicked.connect(self._ctrl.load_rwkv_test_model)
         brow.addWidget(load_btn)
         clr = QPushButton()
@@ -1135,14 +1439,12 @@ class MainWindow(QMainWindow):
         brow.addWidget(clr)
         brow.addStretch()
         self.test_status_lbl = QLabel(self._ctrl.rwkv_status)
-        self.test_status_lbl.setStyleSheet("color: #9ca3af;")
+        self.test_status_lbl.setStyleSheet(f"color: {self._ui['muted']};")
         brow.addWidget(self.test_status_lbl)
         lg.addLayout(brow)
         v.addWidget(load_grp)
 
-        chat_grp = QGroupBox()
-        self._tr_reg(chat_grp, "test_chat_title", "title")
-        cl = QVBoxLayout(chat_grp)
+        chat_grp, cl = self._section_panel("test_chat_title")
         self.test_chat_view = self._log_panel(mono=True)
         self._tr_reg(self.test_chat_view, "test_chat_empty", "placeholder")
         cl.addWidget(self.test_chat_view, 1)
@@ -1154,6 +1456,8 @@ class MainWindow(QMainWindow):
         ph.addWidget(self.test_prompt_le, 1)
         send_btn = QPushButton()
         self._tr_reg(send_btn, "btn_send")
+        send_btn.setObjectName("primary")
+        send_btn.setFixedWidth(120)
         send_btn.clicked.connect(self._send_test_prompt)
         ph.addWidget(send_btn)
         cl.addLayout(ph)
@@ -1193,8 +1497,9 @@ class MainWindow(QMainWindow):
             sys.platform != "win32" or c.build_tools_fully_ready
         )
         self.setWindowTitle(tr("app_title"))
-        self.gpu_label.setText(tr("gpu_chip", v=c.gpu_info) if c.env_ready else c.gpu_info)
-        self.status_label.setText(c.status)
+        self._sync_shell_header()
+        if hasattr(self, "nav_hint"):
+            self.nav_hint.setText(c.status)
 
         # ── CUDA log ──────────────────────────────────────────────────────────
         if hasattr(self, "cuda_log"):
@@ -1255,7 +1560,7 @@ class MainWindow(QMainWindow):
 
         # ── Export ────────────────────────────────────────────────────────────
         if hasattr(self, "exp_dir_lbl"):
-            self.exp_dir_lbl.setText(tr("export_output_dir_label", path=c.output_dir))
+            self.exp_dir_lbl.setText(c.output_dir)
         if hasattr(self, "file_list"):
             self.file_list.setPlainText("\n".join(c.output_files))
         if hasattr(self, "exp_export_btn"):
