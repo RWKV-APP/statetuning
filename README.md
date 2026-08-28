@@ -1,180 +1,184 @@
+<div align="right">
+  <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
+</div>
+
 # State-Tuning Studio
 
-RWKV **State Tuning** 的可视化工具，用于配置模型、准备数据、启动训练、监控进度、导出权重，并在本地测试推理效果。
+A graphical tool for RWKV **State Tuning**. Configure models, prepare data, launch training, monitor progress, export weights, and test inference locally—all from one interface.
 
-本仓库包含 **两套客户端**，功能基本一致，可按平台与使用习惯选择：
+This repository includes **two clients** with broadly the same feature set. Choose the one that best fits your platform and workflow:
 
-| 客户端 | 目录 | 技术栈 | 适用场景 |
-|--------|------|--------|----------|
-| Flutter 版 | 项目根目录（`lib/` 等） | Flutter / Dart | 桌面端（Windows / Linux） |
-| PySide 桌面版 | `pyside_desktop/` | Python / PySide6 | Windows / Linux 原生桌面应用 |
+| Client | Location | Tech Stack | Best For |
+|--------|----------|------------|----------|
+| Flutter client | Project root (`lib/`, etc.) | Flutter / Dart | Desktop (Windows / Linux) |
+| PySide desktop client | `pyside_desktop/` | Python / PySide6 | Native desktop apps for Windows / Linux |
 
-内置训练脚本位于各客户端自带的 `statetuning_repo/` 目录中，支持 bf16 / fp16 / fp32 精度的 RWKV7 State Tuning 训练。
+The bundled training scripts are located in each client's `statetuning_repo/` directory and support RWKV7 State Tuning in bf16, fp16, and fp32 precision.
 
-## 预览
+## Preview
 
 <p align="center">
-  <img src="previewimg/1.png" alt="预览 1" width="45%" />
-  <img src="previewimg/2.png" alt="预览 2" width="45%" />
+  <img src="previewimg/1.png" alt="Preview 1" width="45%" />
+  <img src="previewimg/2.png" alt="Preview 2" width="45%" />
 </p>
 <p align="center">
-  <img src="previewimg/3.png" alt="预览 3" width="45%" />
-  <img src="previewimg/4.png" alt="预览 4" width="45%" />
+  <img src="previewimg/3.png" alt="Preview 3" width="45%" />
+  <img src="previewimg/4.png" alt="Preview 4" width="45%" />
 </p>
 <p align="center">
-  <img src="previewimg/5.png" alt="预览 5" width="45%" />
-  <img src="previewimg/6.png" alt="预览 6" width="45%" />
+  <img src="previewimg/5.png" alt="Preview 5" width="45%" />
+  <img src="previewimg/6.png" alt="Preview 6" width="45%" />
 </p>
 <p align="center">
-  <img src="previewimg/7.png" alt="预览 7" width="45%" />
+  <img src="previewimg/7.png" alt="Preview 7" width="45%" />
 </p>
 
-## 主要功能
+## Features
 
-- **模型**：选择预训练 `.pth` 权重与 tokenizer
-- **数据**：管理训练仓库与 JSONL 数据集
-- **训练**：配置超参数并启动 State Tuning
-- **监控**：查看 loss 曲线与训练日志
-- **导出**：导出训练后的 state 权重
-- **设置**：检测 / 一键安装 Python 环境（PyTorch、依赖包等）
-- **测试**：加载模型并进行对话式推理测试
+- **Models**: Select pretrained `.pth` weights and a tokenizer
+- **Data**: Manage the training repository and JSONL datasets
+- **Training**: Configure hyperparameters and launch State Tuning
+- **Monitoring**: View loss curves and training logs
+- **Export**: Export trained state weights
+- **Settings**: Detect or install the Python environment with one click, including PyTorch and other dependencies
+- **Testing**: Load a model and run conversational inference tests
 
-支持 **English / 简体中文 / 繁體中文** 界面切换。
+The interface supports **English / Simplified Chinese / Traditional Chinese**.
 
-## 项目结构
+## Project Structure
 
 ```
 statetuning/
-├── lib/                    # Flutter 应用源码
-├── assets/                 # Flutter 资源（含 statetuning_repo.zip）
-├── android/ ios/ windows/ linux/   # Flutter 各平台工程
-├── pyside_desktop/         # PySide 桌面版
-│   ├── main.py             # 桌面版入口
-│   ├── main_window.py      # 主窗口 UI
-│   ├── controller.py       # 业务逻辑
-│   ├── locale/             # 多语言文案
-│   └── statetuning_repo/   # 内置训练仓库（PySide 版直接使用）
-├── previewimg/             # 界面预览截图
+├── lib/                    # Flutter application source
+├── assets/                 # Flutter assets, including statetuning_repo.zip
+├── android/ ios/ windows/ linux/   # Flutter platform projects
+├── pyside_desktop/         # PySide desktop client
+│   ├── main.py             # Desktop application entry point
+│   ├── main_window.py      # Main window UI
+│   ├── controller.py       # Application logic
+│   ├── locale/             # Localized strings
+│   └── statetuning_repo/   # Bundled training repository used by PySide
+├── previewimg/             # Interface screenshots
 └── README.md
 ```
 
 ---
 
-## 运行 Flutter 版
+## Run the Flutter Client
 
-### 环境要求
+### Requirements
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install)（Dart SDK ^3.8.1）
-- 对应平台的构建工具（如 Android Studio、Xcode、Visual Studio 等）
-- 依赖插件 [`rwkv_mobile_flutter`](https://github.com/MollySophia/rwkv_mobile_flutter)（用于移动端模型加载与推理）
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (Dart SDK ^3.8.1)
+- Build tools for your target platform, such as Android Studio, Xcode, or Visual Studio
+- The [`rwkv_mobile_flutter`](https://github.com/MollySophia/rwkv_mobile_flutter) plugin for model loading and inference on mobile devices
 
-### 准备依赖
+### Prepare Dependencies
 
-`pubspec.yaml` 中默认通过本地路径引用 `rwkv_mobile_flutter`：
+By default, `pubspec.yaml` references `rwkv_mobile_flutter` through a local path:
 
 ```yaml
 rwkv_mobile_flutter:
   path: ../../rwkv_mobile_flutter
 ```
 
-请将该仓库克隆到与 `statetuning` 同级的目录，或修改 `pubspec.yaml` 中的 `path` / `git` 地址。
+Clone that repository next to `statetuning`, or update the `path` / `git` source in `pubspec.yaml`.
 
-目录示例：
+Example directory layout:
 
 ```
 Documents/
 ├── rwkv_mobile_flutter/
-└── statetuning/statetuning/   # 本仓库 Flutter 工程根目录
+└── statetuning/statetuning/   # Root of this Flutter project
 ```
 
-### 启动
+### Launch
 
-在项目根目录（含 `pubspec.yaml` 的目录）执行：
+Run the following commands from the project root containing `pubspec.yaml`:
 
 ```bash
 flutter pub get
 flutter run
 ```
 
-指定设备示例：
+To target a specific device:
 
 ```bash
-# Windows 桌面
+# Windows desktop
 flutter run -d windows
 
-# Linux 桌面
+# Linux desktop
 flutter run -d linux
 
-# Android 设备 / 模拟器
+# Android device or emulator
 flutter run -d android
 ```
 
-首次运行会在应用内解压并初始化内置训练仓库；可在 **设置** 页检测并安装 Python 训练环境。
+On first launch, the app extracts and initializes the bundled training repository. Use the **Settings** page to detect or install the Python training environment.
 
 ---
 
-## 运行 PySide 桌面版
+## Run the PySide Desktop Client
 
-### 环境要求
+### Requirements
 
-- Python 3.10+（推荐 3.11 或 3.12）
-- 可选：NVIDIA GPU + CUDA（用于训练与 GPU 推理）
-- Windows 上训练 CUDA 算子时可能需要 **Visual Studio Build Tools**（应用内可检测并引导安装）
+- Python 3.10+ (3.11 or 3.12 recommended)
+- Optional: an NVIDIA GPU with CUDA for training and GPU inference
+- On Windows, compiling CUDA operators may require **Visual Studio Build Tools**; the app can detect this requirement and guide you through installation
 
-### 启动
+### Launch
 
-**方式一：从项目根目录启动（推荐）**
+**Option 1: Launch from the project root (recommended)**
 
 ```bash
 cd /path/to/statetuning
 python -m pyside_desktop.main
 ```
 
-**方式二：进入 `pyside_desktop` 目录启动**
+**Option 2: Launch from the `pyside_desktop` directory**
 
 ```bash
 cd pyside_desktop
 python main.py
-# 或
+# or
 python -m main
 ```
 
-若未安装 PySide6，程序会自动在 `pyside_desktop/.venv` 中创建虚拟环境并安装依赖，不会直接写入系统 Python。安装时会按默认源和常见镜像自动重试，也可通过 `PIP_INDEX_URL` 指定自己的镜像源。
+If PySide6 is not installed, the launcher automatically creates a virtual environment at `pyside_desktop/.venv` and installs the dependencies without modifying the system Python installation. It retries the default package index and common mirrors automatically. You can also set `PIP_INDEX_URL` to use a custom mirror.
 
-### 首次使用
+### First-Time Setup
 
-1. 打开 **设置** 页，点击 **检测环境** 或 **一键安装**，自动创建 `python_venv` 并安装 PyTorch 等依赖。
-2. 也可点击 **选择已有环境**，指定已有的 Python 虚拟环境目录；若目录为空则会自动在该路径下安装。
-3. 环境就绪后，在 **模型 / 数据 / 训练** 等页面按流程操作即可。
+1. Open **Settings**, then select **Detect Environment** or **One-Click Install** to create `python_venv` and install PyTorch and other dependencies.
+2. Alternatively, select **Choose Existing Environment** and provide a Python virtual environment directory. If the directory is empty, the dependencies are installed there automatically.
+3. Once the environment is ready, follow the workflow through the **Models**, **Data**, and **Training** pages.
 
-PySide 版的 **测试** 页通过独立 Python 子进程（`_pyside_rwkv_test_worker.py`）加载模型并生成文本，无需 Flutter 插件。
+The PySide client's **Testing** page loads models and generates text through a separate Python subprocess (`_pyside_rwkv_test_worker.py`), so it does not require the Flutter plugin.
 
 ---
 
-## 训练仓库说明
+## Training Repository
 
-各客户端内置的 `statetuning_repo/` 为 RWKV State Tuning 训练脚本，详细参数说明见：
+Each client includes a `statetuning_repo/` directory containing the RWKV State Tuning scripts. See the following files for detailed parameter documentation:
 
-- Flutter 解压后：`assets/statetuning_repo/README.md`
-- PySide 版：`pyside_desktop/statetuning_repo/README.md`
+- Flutter client after extraction: `assets/statetuning_repo/README.md`
+- PySide client: `pyside_desktop/statetuning_repo/README.md`
 
-也可在命令行直接运行训练（需先配置好 Python 环境与 `train.py` 参数）：
+You can also run training directly from the command line after configuring the Python environment and the parameters in `train.py`:
 
 ```bash
 cd pyside_desktop/statetuning_repo
 python train.py
 ```
 
-## 两个版本如何选择
+## Choosing a Client
 
-| | Flutter 版 | PySide 桌面版 |
-|---|-----------|--------------|
-| 移动端 | ✅ Android / iOS | ❌ |
-| 桌面端 | ✅ Windows / Linux 等 | ✅ Windows / Linux |
-| 模型测试后端 | `rwkv_mobile_flutter` 插件 | Python + PyTorch 子进程 |
-| 环境安装 | 应用内引导 | 应用内一键安装，支持 uv / pip |
-| 依赖 | Flutter SDK + rwkv_mobile_flutter | Python 3 + PySide6（可自动安装） |
+| | Flutter Client | PySide Desktop Client |
+|---|----------------|-----------------------|
+| Mobile | ✅ Android / iOS | ❌ |
+| Desktop | ✅ Windows / Linux, etc. | ✅ Windows / Linux |
+| Model testing backend | `rwkv_mobile_flutter` plugin | Python + PyTorch subprocess |
+| Environment setup | Guided setup in the app | One-click setup in the app with uv / pip support |
+| Dependencies | Flutter SDK + rwkv_mobile_flutter | Python 3 + PySide6 (automatic installation available) |
 
-## 许可证
+## License
 
-请参阅仓库中的 LICENSE 文件（如有）。
+See the `LICENSE` file in this repository.
